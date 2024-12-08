@@ -1,8 +1,7 @@
 # Swire Coca-Cola Predictive Maintenance
 
-**Group Project for MSBA Capstone - Anish Khairnar, Ankuramol Chitnis, Kritika Mahna, Sambit Pani and Sakshi Pandey
+**Group Project for MSBA Capstone - Anish Khairnar, Ankuramol Chitnis, Kritika Mahna, Sambit Pani and Sakshi Pandey**
 ![image](https://github.com/user-attachments/assets/2b37f7bf-05ec-4165-a141-6b544fc563ab)
-]**
 
 ![logo](https://github.com/user-attachments/assets/402b2a56-94d9-4e3c-811d-9ce1e660d6c4)
 
