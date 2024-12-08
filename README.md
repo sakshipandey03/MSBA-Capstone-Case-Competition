@@ -3,8 +3,6 @@
 **Group Project for MSBA Capstone - Anish Khairnar, Ankuramol Chitnis, Kritika Mahna, Sambit Pani and Sakshi Pandey**
 ![image](https://github.com/user-attachments/assets/2b37f7bf-05ec-4165-a141-6b544fc563ab)
 
-![logo](https://github.com/user-attachments/assets/402b2a56-94d9-4e3c-811d-9ce1e660d6c4)
-
 ## Business Problem Statement
 
 Swire Coca-Cola faces challenges with its current reactive maintenance process, which leads to extended machine downtimes, high operational costs, and reduced productivity. The company struggles to predict machine failures and manage maintenance schedules and inventory efficiently. This unpredictability affects their ability to meet customer demand and strains financial resources.
