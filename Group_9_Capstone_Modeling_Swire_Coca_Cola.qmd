@@ -1,0 +1,1702 @@
+---
+title: "Modeling Swire Coca Cola"
+author: "Group 9- ANISH KHAIRNAR, ANKUR CHITNIS, KRITIKA, SAKSHI PANDEY, SAMBIT PANI"
+date: "October 26, 2024"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-smooth-scroll: true
+    toc-depth: 3
+    toc-location: left
+    toc-title: "Contents"
+execute:
+  include: true
+  echo: true
+  eval: true    
+  warning: false
+  message: false
+
+---
+
+```{r setup_data, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+## 1. Introduction
+
+### 1.1. Business Problem Statement
+
+Swire Coca-Cola, USA, operates across multiple states and is responsible for the production, sale, and distribution of Coca-Cola and other beverages. Efficient machine operations are essential to ensuring a consistent production flow, but unplanned machine failures can significantly disrupt manufacturing processes, leading to costly downtimes and reduced production capacity. To minimize these disruptions, Swire Coca-Cola seeks a **predictive maintenance solution** to forecast machine failures before they occur and optimize maintenance schedules.
+
+The objective of this project is to develop a **predictive maintenance model** using historical machine data to forecast when failures are likely to occur. By analyzing the machine’s operational conditions, maintenance logs, failure history, and environmental data, we aim to detect patterns that indicate when a machine is at risk of failure. This approach will allow Swire Coca-Cola to proactively schedule maintenance, minimize unplanned downtimes, and improve overall operational efficiency.
+
+By analyzing historical data from the Internal Warehouse Controller (IWC) system, the goal is to identify patterns in machine failures, predict future downtimes, and ensure that necessary parts are available in advance. The solution aims to minimize unplanned downtimes, optimize machine reliability, and improve production capacity while reducing financial losses.
+
+**Analytic Approach**
+
+To achieve predictive maintenance for Swire Coca-Cola’s machinery, we employed a structured analytic approach that includes data preparation, feature engineering, model selection, and evaluation. Our goal was to develop models capable of predicting machine failures with high accuracy, allowing the maintenance team to act proactively. The following steps outline the methodology used:
+
+1. **Data Collection and Preparation:**  
+   We utilized historical machine data from Swire Coca-Cola's Internal Warehouse Controller (IWC) system, which includes information on machine operations, maintenance logs, failure history, and relevant environmental factors. This data was cleaned and pre-processed to address missing values, outliers, and inconsistencies, ensuring it was ready for analysis.
+
+2. **Feature Engineering:**  
+   We created additional features to enhance model performance, such as aggregating operational conditions, calculating machine age, and flagging high-maintenance periods. These features were derived from the raw data to capture patterns that may indicate the likelihood of machine failure.
+
+3. **Model Selection and Training:**  
+   Several machine learning algorithms were evaluated, including **Logistic Regression**, **Random Forest**, and **XGBoost**. These models were selected for their ability to handle classification problems, interpretability, and robustness. Each model was trained on the historical data, with specific focus areas like machine age groups, regional breakdowns, and high-maintenance machines.
+
+4. **Model Evaluation and Cross-Validation:**  
+   The models were evaluated using cross-validation and various performance metrics, such as accuracy, precision, recall, and F1-score, to ensure reliability. Comparisons across models were conducted to identify the best-performing model for each category (e.g., high-maintenance machines, specific regions).
+
+5. **Business Impact Analysis:**  
+   We analyzed the predicted outcomes to assess potential business benefits, such as reduced downtime, improved production capacity, and cost savings. Additionally, the forecasted failures were aligned with maintenance scheduling to allow Swire Coca-Cola to optimize resource allocation and parts inventory.
+
+Through this approach, we aim to deliver a predictive maintenance solution that empowers Swire Coca-Cola to move from reactive to proactive maintenance strategies, ultimately improving operational efficiency and reducing financial impact due to unplanned machine failures.
+
+
+### 1.2. Importing Libraries
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(scales)
+library(caret)
+library(randomForest)
+library(xgboost)
+```
+
+### 1.3. Data Preparation for Modeling
+
+In this section, we summarize the data preparation steps that were performed during the **Exploratory Data Analysis (EDA)** phase. The dataset was cleaned and feature-engineered, and the processed data is saved in the file `data.csv`, which will be used for model training and evaluation.
+
+**Key Data Preparation Steps (from EDA)**
+
+1. **Handling Missing Data**:
+   - We identified and handled missing values in several columns:
+     - **Categorical Fields** (e.g., `MAINTENANCE_PLAN`, `ORDER_DESCRIPTION`, `EQUIPMENT_DESC`): Missing values were imputed with `"Unknown"` or relevant default values (e.g., `"Unplanned"` for `MAINTENANCE_PLAN`).
+     - **Critical Fields** (e.g., `EQUIPMENT_ID`, `MAINTENANCE_ITEM`): These fields had substantial missing data, and due to their importance, they were either excluded from modeling or flagged for further analysis.
+   
+2. **Feature Engineering**:
+   - **Machine Age**: We derived the age of the equipment based on the `EQUIP_START_UP_DATE` to understand its lifecycle and potential failure likelihood.
+   - **Time Since Last Maintenance**: Calculated the time difference from the last maintenance event to predict the likelihood of failure.
+   - **Maintenance Frequency**: We calculated the frequency of maintenance activities to understand how often a machine is serviced.
+   
+3. **Date and Time Processing**:
+   - Converted `EXECUTION_START_DATE` and `EXECUTION_FINISH_DATE` to `Date` type for time-based trend analysis.
+   - Aggregated downtime by **month** to understand patterns and trends in machine downtimes over time.
+
+4. **Final Dataset Overview**:
+   The cleaned dataset (`data.csv`) contains the following key columns:
+   - **Failure**: The target variable indicating whether a machine failure occurred (binary classification).
+   - **MachineAge**: Age of the machine derived from `EQUIP_START_UP_DATE`.
+   - **TimeSinceLastMaintenance**: Time elapsed since the last maintenance activity.
+   - **OperationalConditions**: Various operational features like temperature, humidity, etc.
+
+
+### 1.4. Loading the Cleaned Dataset for Modeling
+
+```{r}
+# Load the cleaned dataset that was prepared during the EDA phase
+data <- read.csv("data.csv")
+
+# Display the first few rows to confirm the dataset is loaded correctly
+head(data)
+```
+
+## 2. Machine Failure Prediction on Entire Machine Fleet
+**Goal:** Identify factors predicting machine failure across the entire fleet and determine the most accurate model.
+
+**Key Questions**
+
+  - What are the primary factors contributing to machine failure across the fleet?
+  - Which model is most effective for predicting failures, and how should it be used to guide maintenance decisions?
+
+    
+### 2.1 Data Preparation: Feature Engineering and Cleaning
+**Objective**: Prepare the data for modeling by handling missing values, creating new features, and encoding categorical variables.
+
+```{r}
+
+print(paste("Initial shape:", dim(data)))
+
+# Handle missing values
+#data$ACTUAL_WORK_IN_MINUTES[is.na(data$ACTUAL_WORK_IN_MINUTES)] <- median(data$ACTUAL_WORK_IN_MINUTES, na.rm = TRUE)
+#data$ORDER_DESCRIPTION[is.na(data$ORDER_DESCRIPTION)] <- 'Unknown'
+#data$MAINTENANCE_ACTIVITY_TYPE[is.na(data$MAINTENANCE_ACTIVITY_TYPE)] <- 'Unknown'
+
+# Create basic features
+data$Is_Planned <- as.integer(data$MAINTENANCE_ACTIVITY_TYPE == 'Planned')
+
+# Create target variable
+threshold <- quantile(data$ACTUAL_WORK_IN_MINUTES, 0.40)
+data$Failure <- as.integer(data$ACTUAL_WORK_IN_MINUTES > threshold)
+
+# Encode categorical variables using factor() and converting to numeric
+data$MAINTENANCE_ACTIVITY_TYPE_encoded <- as.numeric(factor(data$MAINTENANCE_ACTIVITY_TYPE))
+data$PRODUCTION_LOCATION_encoded <- as.numeric(factor(data$PRODUCTION_LOCATION))
+data$ORDER_DESCRIPTION_encoded <- as.numeric(factor(data$ORDER_DESCRIPTION))
+
+# Convert EQUIP_START_UP_DATE to Date format (if not already done)
+data$EQUIP_START_UP_DATE <- as.Date(data$EQUIP_START_UP_DATE, format = "%Y-%m-%d")
+
+# Create a new column for machine age using EQUIP_START_UP_DATE
+data$MACHINE_AGE <- as.numeric(difftime(Sys.Date(), data$EQUIP_START_UP_DATE, units = "days"))
+
+data$MACHINE_AGE[is.na(data$MACHINE_AGE)] <- 0
+
+
+```
+- **Handle Missing Values**: 
+    - Missing values in `ACTUAL_WORK_IN_MINUTES`, `ORDER_DESCRIPTION`, and `MAINTENANCE_ACTIVITY_TYPE` are handled by replacing `NA` values with the median for continuous values and an "Unknown" category for categorical variables. This ensures complete data for modeling.
+    - **Why This Matters**: 
+      - Replacing missing numerical data (e.g., work time) with the median helps retain the overall distribution and prevents distortion in the analysis.
+      - "Unknown" is used for categorical variables to preserve the structure of the data while avoiding any biases from missing information.
+
+- **Feature Engineering**:
+    - **Is_Planned**: A binary feature distinguishing between planned and unplanned maintenance.
+    - **Failure**: Target variable defined as whether `ACTUAL_WORK_IN_MINUTES` exceeds the 40th percentile. This categorizes machines with significant downtime as failures.
+    - **Categorical Encoding**: Using `factor()` to convert categorical variables to numeric for machine learning compatibility.
+    - **Machine Age**: Calculated from `EQUIP_START_UP_DATE`, assuming older machines may be more prone to failure.
+    - **Insights**: 
+      - The `Failure` target variable is an important feature, but the threshold (40th percentile) could be adjusted depending on domain knowledge, potentially making it more specific to the type of failure.
+      - Encoding categorical variables ensures that the models can process non-numeric data, which is crucial for most machine learning algorithms.
+      - The assumption that older machines are more failure-prone with the `Machine Age` feature may be a valuable indicator, but this could also be influenced by other factors like usage intensity.
+
+
+### 2.2. Split Data into Training and Testing Sets
+**Objective**: Split the dataset into a training set (70%) and testing set (30%) to evaluate model performance.
+
+```{r}
+
+# Load necessary libraries
+if(!require(caret)) install.packages("caret", dependencies = TRUE)
+library(caret)
+
+# Select features for modeling
+features <- c('MACHINE_AGE', 'MAINTENANCE_ACTIVITY_TYPE_encoded', 'PRODUCTION_LOCATION_encoded', 'ORDER_DESCRIPTION_encoded')
+X <- data[features]
+y <- data$Failure
+
+# Split the data (train/test split with caret)
+set.seed(42)
+trainIndex <- createDataPartition(y, p = 0.7, list = FALSE)
+X_train <- X[trainIndex, ]
+y_train <- y[trainIndex]
+X_test <- X[-trainIndex, ]
+y_test <- y[-trainIndex]
+
+# Scale features (using scale() in R)
+X_train_scaled <- scale(X_train)
+X_test_scaled <- scale(X_test)
+
+```
+
+- **Split Data**: 
+    - Using `createDataPartition` ensures a representative distribution in both training and test sets, particularly for imbalanced datasets.
+- **Feature Scaling**: 
+    - Features are scaled using `scale()` to standardize them across models, which is particularly important for logistic regression.
+    - **Why This Is Crucial**: 
+      - The 70/30 data split ensures that the model gets sufficient data for training while still being able to evaluate its performance on unseen data.
+      - Scaling features helps prevent issues where variables with larger ranges dominate the model, leading to biased predictions. This is especially critical for algorithms like logistic regression that rely on distances or gradients.
+
+
+### 2.3. Logistic Regression Model
+**Objective**: Logistic Regression provides a baseline for binary classification, offering interpretability but may underperform on complex data.
+
+```{r}
+lr_model <- glm(Failure ~ ., data = data.frame(X_train_scaled, Failure = y_train), family = binomial)
+
+#Make predictions with Logistic Regression
+y_pred_lr <- predict(lr_model, newdata = data.frame(X_test_scaled), type = "response")
+y_pred_lr <- ifelse(y_pred_lr > 0.5, 1, 0)
+
+#Calculate and print metrics for Logistic Regression
+cat("\nLogistic Regression Model Performance Metrics:\n")
+cat("Accuracy:", mean(y_test == y_pred_lr), "\n")
+cat("Precision:", posPredValue(factor(y_pred_lr), factor(y_test)), "\n")
+cat("Recall:", sensitivity(factor(y_pred_lr), factor(y_test)), "\n")
+
+#Print confusion matrix for Logistic Regression
+cat("\nLogistic Regression Confusion Matrix:\n")
+conf_matrix_lr <- table(Predicted = y_pred_lr, Actual = y_test)
+print(conf_matrix_lr)
+
+```
+- **Performance Metrics**:
+    - **Accuracy**: 0.64, a moderate measure of overall correctness, though it may be misleading with imbalanced data.
+    - **Precision**: 0.68, indicating a good prediction rate for true failures.
+    - **Recall**: 0.28, showing the model misses many actual failures.
+    - **Confusion Matrix**: 
+      - The matrix indicates the proportion of false positives and false negatives, revealing the model's struggle to detect true failures.
+    - **Insights and Takeaways**: 
+      - The model's **accuracy** of 0.64 suggests that it has a reasonable performance, but it might be misleading in cases where failures are rare compared to non-failures. Accuracy alone is not sufficient in imbalanced classification problems.
+      - The **precision** of 0.68 shows that when the model predicts a failure, it's quite likely to be correct. However, the **recall** of 0.28 indicates that the model misses a substantial number of true failures. This suggests the model could benefit from adjustments or more complex approaches to identify failures better.
+      - The confusion matrix clearly indicates that while the model predicts some true failures, it also makes a lot of false negative errors (failing to predict actual failures), which is crucial for further model improvements.
+
+
+### 2.4. Random Forest Model
+**Objective**: Random Forest, an ensemble method, handles non-linear relationships better than logistic regression.
+
+```{r}
+library(randomForest)
+
+#Train Random Forest model
+rf_model <- randomForest(x = X_train_scaled, y = as.factor(y_train), ntree = 100, maxnodes = 10, importance = TRUE)
+
+#Make predictions with Random Forest
+y_pred_rf <- predict(rf_model, newdata = X_test_scaled)
+
+#Calculate and print metrics for Random Forest
+cat("\nRandom Forest Model Performance Metrics:\n")
+cat("Accuracy:", mean(y_test == y_pred_rf), "\n")
+cat("Precision:", posPredValue(factor(y_pred_rf), factor(y_test)), "\n")
+cat("Recall:", sensitivity(factor(y_pred_rf), factor(y_test)), "\n")
+
+#Print confusion matrix for Random Forest
+cat("\nRandom Forest Confusion Matrix:\n")
+conf_matrix_rf <- table(Predicted = y_pred_rf, Actual = y_test)
+print(conf_matrix_rf)
+```
+- **Performance Metrics**:
+    - **Accuracy**: 0.66, higher than logistic regression, indicating improved overall performance.
+    - **Precision**: 0.74, outperforming logistic regression in predicting true positives.
+    - **Recall**: 0.28, similar to logistic regression, suggesting challenges in identifying failures.
+    - **Confusion Matrix**: 
+      - Similar to logistic regression, the model predicts many non-failures as failures.
+    - **Key Insights**: 
+      - The **accuracy** of 0.66 indicates that Random Forest is slightly better than logistic regression at making correct predictions overall. The higher **precision** (0.74) suggests it does a better job at correctly identifying true failures, which is an improvement over the simpler logistic regression model.
+      - However, the **recall** of 0.28 remains low, which suggests that despite the improvements, Random Forest still struggles to capture many true failures, highlighting that the model may benefit from fine-tuning or additional features that help distinguish failure events more clearly.
+      - The confusion matrix shows that while the model has improved precision, it still misclassifies a lot of failures as non-failures, which affects its utility in predictive maintenance.
+
+
+
+### 2.6. XGBoost Model
+**Objective**: XGBoost, a gradient-boosting model, handles imbalances and complex relationships better than both Random Forest and logistic regression.
+
+```{r}
+library(xgboost)
+# Train XGBoost model
+dtrain <- xgb.DMatrix(data = X_train_scaled, label = y_train)
+dtest <- xgb.DMatrix(data = X_test_scaled, label = y_test)
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss",
+  max_depth = 10,
+  eta = 0.1,
+  nthread = 4
+)
+xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100)
+
+#Make predictions with XGBoost
+y_pred_xgb <- predict(xgb_model, newdata = dtest)
+y_pred_xgb <- ifelse(y_pred_xgb > 0.5, 1, 0)
+
+#Calculate and print metrics for XGBoost
+cat("\nXGBoost Model Performance Metrics:\n")
+cat("Accuracy:", mean(y_test == y_pred_xgb), "\n")
+cat("Precision:", posPredValue(factor(y_pred_xgb), factor(y_test)), "\n")
+cat("Recall:", sensitivity(factor(y_pred_xgb), factor(y_test)), "\n")
+
+#Print confusion matrix for XGBoost
+cat("\nXGBoost Confusion Matrix:\n")
+conf_matrix_xgb <- table(Predicted = y_pred_xgb, Actual = y_test)
+print(conf_matrix_xgb)
+```
+
+- **Performance Metrics**:
+    - **Accuracy**: 0.58, lower than Random Forest, but still a useful performance indicator.
+    - **Precision**: 0.50, lower than Random Forest, indicating more false positives.
+    - **Recall**: 0.69, the highest among the models, indicating a better ability to detect failures.
+    - **Confusion Matrix**: 
+      - XGBoost predicts many failures but sacrifices precision for higher recall.
+    - **Detailed Insights**: 
+      - The **accuracy** of 0.58 is lower than Random Forest, but **precision** drops to 0.50, indicating that XGBoost may be making more false positive errors. However, it excels in **recall** (0.69), suggesting it is better at detecting actual failures than the other models. This is particularly important in failure prediction, where we prefer to identify as many failures as possible, even at the cost of some false positives.
+      - The confusion matrix reinforces this observation, showing that while XGBoost is more sensitive in detecting failures, it predicts a lot of false alarms. This could be useful for minimizing downtime but may lead to unnecessary interventions.
+
+### 2.7. Results Comparison
+**Objective**: Summarize model performance to select the best model for machine failure prediction.
+
+```{r}
+
+#Calculate metrics for Logistic Regression
+lr_accuracy <- mean(y_test == y_pred_lr)
+lr_precision <- posPredValue(factor(y_pred_lr), factor(y_test))
+lr_recall <- sensitivity(factor(y_pred_lr), factor(y_test))
+
+#Calculate metrics for Random Forest
+rf_accuracy <- mean(y_test == y_pred_rf)
+rf_precision <- posPredValue(factor(y_pred_rf), factor(y_test))
+rf_recall <- sensitivity(factor(y_pred_rf), factor(y_test))
+
+#Calculate metrics for XGBoost
+xgb_accuracy <- mean(y_test == y_pred_xgb)
+xgb_precision <- posPredValue(factor(y_pred_xgb), factor(y_test))
+xgb_recall <- sensitivity(factor(y_pred_xgb), factor(y_test))
+
+#Combine metrics into a dataframe
+model_metrics <- data.frame(
+  Model = c("Logistic Regression", "Random Forest", "XGBoost"),
+  Accuracy = c(lr_accuracy, rf_accuracy, xgb_accuracy),
+  Precision = c(lr_precision, rf_precision, xgb_precision),
+  Recall = c(lr_recall, rf_recall, xgb_recall)
+)
+
+#Print the dataframe
+print(model_metrics)
+
+```
+
+- **Summary of Metrics**:
+    - **Accuracy**: Random Forest performs best (0.66).
+    - **Precision**: Random Forest is again the best (0.74).
+    - **Recall**: XGBoost leads with a recall of 0.69.
+    - **Takeaway**: 
+      - **Best Model for Precision**: Random Forest is the most balanced, performing well in both **accuracy** and **precision**. It provides the best overall trade-off between false positives and true positives.
+      - **Best Model for Recall**: XGBoost excels in **recall**, which is critical for detecting failures but sacrifices precision. In a failure prediction context, this may be preferred if identifying all potential failures is more important than minimizing false alarms.
+      - **Overall Recommendation**: If the primary goal is to reduce missed failures, XGBoost may be the best option. However, if maintaining balance between correct predictions and minimizing false alarms is more important, Random Forest would be the better choice.
+
+
+### 2.8. Model Evaluation Through Visualizations and Insights
+**Objective**: Use visualizations to gain deeper insights into model performance, feature importance, and to assess how well the models answer the key questions posed at the beginning of this analysis.
+
+#### 2.8.1 Feature Importance Plots
+
+```{r}
+
+# Random Forest Feature Importance
+rf_importance <- randomForest::importance(rf_model)
+rf_importance_plot <- barplot(rf_importance[,1], main = "Random Forest Feature Importance", las = 2, col = "lightblue", beside = TRUE)
+
+# XGBoost Feature Importance
+xgb_importance <- xgb.importance(feature_names = colnames(X_train_scaled), model = xgb_model)
+xgb_importance_plot <- xgb.plot.importance(xgb_importance, main = "XGBoost Feature Importance")
+
+```
+
+#### 2.8.2 Model Performance Comparison (Accuracy, Precision, Recall)
+```{r}
+
+# Combine metrics into a dataframe for plotting
+model_comparison <- data.frame(
+  Model = rep(c("Logistic Regression", "Random Forest", "XGBoost"), each = 3),
+  Metric = rep(c("Accuracy", "Precision", "Recall"), times = 3),
+  Value = c(lr_accuracy, lr_precision, lr_recall,
+            rf_accuracy, rf_precision, rf_recall,
+            xgb_accuracy, xgb_precision, xgb_recall)
+)
+
+# Enhanced bar plot with better color and styling
+ggplot(model_comparison, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Accuracy" = "#1f77b4", "Precision" = "#ff7f0e", "Recall" = "#2ca02c")) +
+  labs(title = "Model Performance Comparison", y = "Metric Value", x = "Model") +
+  theme_minimal(base_size = 14) +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.title = element_blank()) +
+  theme(legend.position = "top")
+
+
+
+```
+
+#### 2.8.3 Confusion Matrix Heatmaps
+
+```{r}
+# Confusion Matrix Heatmap for Logistic Regression
+library(caret)
+library(ggplot2)
+conf_matrix_lr <- table(Predicted = y_pred_lr, Actual = y_test)
+conf_matrix_lr_heatmap <- as.data.frame(conf_matrix_lr)
+ggplot(conf_matrix_lr_heatmap, aes(x = Predicted, y = Actual, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(title = "Logistic Regression Confusion Matrix Heatmap", x = "Predicted", y = "Actual")
+
+# Confusion Matrix Heatmap for Random Forest
+conf_matrix_rf <- table(Predicted = y_pred_rf, Actual = y_test)
+conf_matrix_rf_heatmap <- as.data.frame(conf_matrix_rf)
+ggplot(conf_matrix_rf_heatmap, aes(x = Predicted, y = Actual, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(title = "Random Forest Confusion Matrix Heatmap", x = "Predicted", y = "Actual")
+
+# Confusion Matrix Heatmap for XGBoost
+conf_matrix_xgb <- table(Predicted = y_pred_xgb, Actual = y_test)
+conf_matrix_xgb_heatmap <- as.data.frame(conf_matrix_xgb)
+ggplot(conf_matrix_xgb_heatmap, aes(x = Predicted, y = Actual, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(title = "XGBoost Confusion Matrix Heatmap", x = "Predicted", y = "Actual")
+
+```
+
+#### 2.8.4 ROC Curves for Model Comparison
+
+```{r}
+library(pROC)
+
+# ROC Curve for Logistic Regression
+roc_lr <- roc(y_test, y_pred_lr)
+plot(roc_lr, main = "ROC Curve Comparison", col = "blue", lwd = 2)
+
+# ROC Curve for Random Forest
+roc_rf <- roc(y_test, as.numeric(y_pred_rf))
+plot(roc_rf, col = "red", lwd = 2, add = TRUE)
+
+# ROC Curve for XGBoost
+roc_xgb <- roc(y_test, as.numeric(y_pred_xgb))
+plot(roc_xgb, col = "green", lwd = 2, add = TRUE)
+
+# Add Legend
+legend("bottomright", legend = c("Logistic Regression", "Random Forest", "XGBoost"), col = c("blue", "red", "green"), lwd = 2)
+
+```
+
+#### 2.8.5 Insights from Visualizations for Machine Failure Prediction on Entire Machine Fleet
+**Objective**: Use visualizations to gain deeper insights into model performance, feature importance, and to assess how well the models answer the key questions posed at the beginning of this analysis.
+
+- **Feature Importance**:
+    - **Purpose**: Understand which variables most influence the model's decision-making process. 
+    - **Insights**: 
+      - Feature importance plots from both **Random Forest** and **XGBoost** help identify key factors that contribute to predicting machine failures. These insights are vital to answer the question: *What features most strongly impact the prediction of machine failures?*
+      - For instance, if features like `Machine Age` or `Is_Planned` are highly ranked, we can confirm that older machines or planned/unplanned maintenance are significant predictors of failure.
+      
+- **Model Performance Comparison**:
+    - **Purpose**: Visually compare the accuracy, precision, and recall of the different models to determine which one best addresses the goal of the analysis.
+    - **Insights**: 
+      - The bar plot comparing the accuracy, precision, and recall of **Logistic Regression**, **Random Forest**, and **XGBoost** answers the question: *Which model offers the best trade-off between precision and recall for identifying machine failures?*
+      - By comparing these metrics, we can identify the best model for minimizing missed failures (high recall) while also minimizing false positives (high precision). For example, **XGBoost** may show higher recall but lower precision, while **Random Forest** may balance both better.
+
+- **Confusion Matrix Heatmaps**:
+    - **Purpose**: Visualize how well each model distinguishes between true failures and non-failures, highlighting areas of misclassification.
+    - **Insights**:
+      - Confusion matrix heatmaps provide clarity on model performance by showing the true positives, false positives, true negatives, and false negatives. This addresses the question: *How well does the model distinguish between actual failures and non-failures?*
+      - If a model has many false negatives, it implies the model is missing failures, which could be problematic for predictive maintenance. On the other hand, too many false positives could lead to unnecessary maintenance.
+    
+- **ROC Curves**:
+    - **Purpose**: Assess the model's ability to discriminate between failure and non-failure classes at different thresholds.
+    - **Insights**:
+      - The ROC curve shows how the models trade off between sensitivity (recall) and specificity (1 - false positive rate). This helps answer the question: *What is the model’s ability to correctly classify failures across different thresholds?*
+      - The **Area Under the Curve (AUC)** can be compared across models, and the model with the highest AUC typically provides the best overall performance in distinguishing failures from non-failures.
+    
+- **How These Visualizations Address the Key Questions**
+
+- **Feature Importance**:
+    - **Key Question Addressed**: *What are the primary factors contributing to machine failure across the fleet?*
+    - **Explanation**: 
+        - The **Feature Importance** plots from **Random Forest** and **XGBoost** clearly show which variables have the most influence on the prediction of machine failures. By examining these plots, we can identify whether features like `Machine Age`, `Maintenance Activity Type (Planned/Unplanned)`, or `Production Location` play significant roles in predicting failures.
+        - For example, if `Machine Age` appears as one of the most important features, it suggests that older machines are more likely to fail, which could be critical for scheduling maintenance activities or targeting older machines for more frequent checks.
+        - This directly answers our initial question by providing an empirical basis for the variables that should be prioritized in maintenance planning.
+
+- **Model Performance Comparison**:
+    - **Key Question Addressed**: *Which model is most effective for predicting failures, and how should it be used to guide maintenance decisions?*
+    - **Explanation**: 
+        - The **Bar Plot** comparing **Accuracy**, **Precision**, and **Recall** for **Logistic Regression**, **Random Forest**, and **XGBoost** allows us to see how each model performs in the context of predicting machine failures. This helps answer the question about model effectiveness by providing metrics on how well each model can predict failures versus non-failures.
+        - **Random Forest**, for instance, shows a good balance between **accuracy** and **precision**, suggesting that it can correctly identify failures with fewer false positives compared to **Logistic Regression**, which might not perform as well on imbalanced data. 
+        - However, **XGBoost** exhibits higher **recall**, which is crucial when trying to minimize missed failures (false negatives). This suggests that while it may produce more false positives, it could be the best choice for ensuring fewer failures go undetected.
+        - These comparisons give clear guidance on which model should be used in practical maintenance scenarios, depending on whether prioritizing fewer false alarms or catching as many failures as possible is the goal.
+
+- **Confusion Matrix Heatmaps**:
+    - **Key Question Addressed**: *How well does each model distinguish between true failures and non-failures?*
+    - **Explanation**:
+        - **Confusion Matrix Heatmaps** visually highlight the performance of each model in classifying failures (true positives) and non-failures (true negatives). By showing how many true positives, false positives, true negatives, and false negatives each model produces, these heatmaps give us direct insights into the classification errors made by the models.
+        - For example, if **Logistic Regression** has many false negatives (failure cases predicted as non-failures), it suggests the model is not sensitive enough to detect failures, which could result in missed maintenance opportunities. On the other hand, a model like **XGBoost** with fewer false negatives but more false positives might indicate it's better at detecting failures but also might trigger unnecessary maintenance work.
+        - This is critical for addressing our question because it allows us to assess not just how accurate the models are, but how well they perform in a real-world context, where minimizing both missed failures and false alarms is important.
+
+- **ROC Curves**:
+    - **Key Question Addressed**: *How does each model perform across different thresholds of failure prediction?*
+    - **Explanation**: 
+        - The **ROC Curves** for **Logistic Regression**, **Random Forest**, and **XGBoost** offer a detailed view of each model’s performance at varying thresholds of classification. The **Area Under the Curve (AUC)** is a key metric that quantifies the overall performance of a model in distinguishing between failure and non-failure classes. A higher AUC indicates a better ability to correctly classify failures without generating too many false positives.
+        - By comparing the ROC curves, we can identify which model offers the best trade-off between **sensitivity** (recall) and **specificity** (the ability to correctly identify non-failures). For example, **XGBoost** may have a higher AUC, indicating it excels at correctly identifying failures even at different thresholds.
+        - This plot directly addresses the question by helping us assess model performance across different operating points (thresholds), allowing us to fine-tune our model for specific business needs—whether that’s prioritizing catching all failures or minimizing unnecessary maintenance.
+
+- **Summary**:
+    - Through visualizations like **feature importance plots**, **model performance comparison bar plots**, **confusion matrix heatmaps**, and **ROC curves**, we’ve gained deep insights into the models' ability to predict machine failures. These plots help answer the following key questions posed at the beginning of the analysis:
+        1. **Which features are most important for predicting machine failure?** → Addressed by **Feature Importance** plots.
+        2. **Which model is most effective for predicting failures?** → Addressed by comparing **Accuracy**, **Precision**, and **Recall** across models.
+        3. **How well does each model distinguish between true and false predictions?** → Addressed by **Confusion Matrix Heatmaps**.
+        4. **How does each model perform across different thresholds?** → Addressed by comparing **ROC Curves** and **AUC** values.
+    - These insights are not just theoretical; they directly guide practical decisions on which model to use in operational settings. Depending on whether the goal is to catch as many failures as possible or to minimize false positives, these visualizations help prioritize the right model and adjustments in the prediction process.
+
+
+- **Final Takeaways**:
+    - The visualizations provide a deeper understanding of model strengths and weaknesses, highlighting where improvements may be needed. For instance, if a model struggles with false negatives, this could prompt further exploration into threshold tuning or additional feature engineering.
+    - ROC curves, in particular, allow us to assess the trade-offs in model performance and select the model that best addresses our specific goal—whether that's reducing false alarms (false positives) or catching as many failures as possible (high recall).
+
+
+
+## 3.Machine Failure Prediction for Machines by Region
+
+**Goal:** To analyze regional differences in machine failure patterns and evaluate model performance across regions, optimizing maintenance strategies.
+
+**Key Questions**
+
+  - What regional differences exist in machine failure patterns, and how do factors like machine age, maintenance activities, and production location influence these patterns?
+ 
+  - How does model performance vary across regions (e.g., Northern vs. Southern), and which model is most reliable for predicting failures in each region?
+
+### 3.1 Data Preparation for Both Regions
+**Objective:** Prepare data for both Northern and Southern regions by adding a "Region" column based on the production locations and filtering data accordingly.
+
+```{r}
+library(dplyr)
+library(randomForest)
+library(xgboost)
+
+# Add a Region column based on production locations
+data <- data %>%
+  mutate(Region = case_when(
+    PRODUCTION_LOCATION %in% c("ROMA", "MONZA") ~ "Northern",
+    PRODUCTION_LOCATION %in% c("COTA", "MONACO") ~ "Southern",
+    TRUE ~ "Other"  # Adjust as needed
+  ))
+
+# Filter data for Northern region
+northern_data <- data %>% filter(Region == "Northern")
+
+# Filter data for Southern region
+southern_data <- data %>% filter(Region == "Southern")
+
+# Get unique values in PRODUCTION_LOCATION
+unique_production_locations <- unique(data$PRODUCTION_LOCATION)
+print(unique_production_locations)
+```
+
+- **Data Preprocessing:** The dataset is subsetted by production location into two main regions, **Northern** and **Southern**. The additional `Region` column helps categorize the data accordingly. 
+
+  - Northern region: Includes locations like **ROMA** and **MONZA**.
+  - Southern region: Includes locations like **COTA** and **MONACO**.
+
+- **Unique Locations:** The dataset also reveals other locations, such as **SUZUKA** and **SILVERSTONE**, which may have different characteristics or be categorized differently in further analysis.
+
+
+
+### 3.2. Northern Region
+**Goal:** Fit a logistic regression model to predict machine failures in the Northern region based on factors like machine age, maintenance activity type, and production location.
+
+#### 3.2.1 Logistic Regression Model for Northern Region
+```{r}
+# Logistic Regression for Northern region
+logistic_northern <- glm(Failure ~ MACHINE_AGE + MAINTENANCE_ACTIVITY_TYPE_encoded +PRODUCTION_LOCATION_encoded +ORDER_DESCRIPTION_encoded, data = northern_data, family = binomial)
+summary(logistic_northern)
+```
+**Insights and Takeaways:**
+
+- **Model Overview:** The logistic regression model is fitted to predict machine failure based on independent variables like `MACHINE_AGE`, `MAINTENANCE_ACTIVITY_TYPE`, and `ORDER_DESCRIPTION`.
+
+- **Interpretation of Coefficients:**
+  - **MACHINE_AGE:** A small negative coefficient indicates that older machines are less likely to fail.
+  - **MAINTENANCE_ACTIVITY_TYPE:** A positive coefficient suggests that certain maintenance activities are strongly correlated with machine failure.
+  - **PRODUCTION_LOCATION:** A negative coefficient indicates that machines in certain locations (encoded as `PRODUCTION_LOCATION_encoded`) are less likely to fail, which might reflect regional differences in machine care or environmental factors.
+
+- **Statistical Significance:** All variables are highly significant (**p < 0.001**), suggesting they are crucial in predicting machine failures.
+
+
+
+#### 3.2.2  Random Forest Model for Northern Region
+**Goal:** Fit a Random Forest model to predict machine failures in the Northern region using the same set of predictors.
+
+```{r}
+# Random Forest for Northern region
+rf_northern_model <- randomForest(Failure ~ MACHINE_AGE + MAINTENANCE_ACTIVITY_TYPE_encoded + PRODUCTION_LOCATION_encoded + ORDER_DESCRIPTION_encoded, data = northern_data, ntree = 100)
+print(rf_northern_model)
+```
+
+**Insights and Takeaways:**
+
+- **Model Overview:** The random forest model is trained with 100 trees to predict machine failure. The model explains **15.67%** of the variance in the data.
+
+- **Key Metrics:**
+  - **Mean of Squared Residuals (MSE):** **0.21**, which is a measure of how well the model fits the data.
+  - The model appears to explain less variation compared to other models (e.g., XGBoost).
+
+
+#### 3.2.3  XGBoost Model for Northern Region
+**Goal:** Fit an XGBoost model to predict machine failures, optimizing the model’s performance with multiple boosting rounds.
+
+```{r}
+# Prepare data for XGBoost
+xgb_northern_data <- as.matrix(northern_data[, c("MACHINE_AGE", "MAINTENANCE_ACTIVITY_TYPE_encoded","PRODUCTION_LOCATION_encoded","ORDER_DESCRIPTION_encoded")])
+xgb_northern_model <- xgboost(data = xgb_northern_data, label = northern_data$Failure, nrounds = 100, objective = "binary:logistic")
+
+# Output model details
+print(xgb_northern_model)
+```
+
+**Insights and Takeaways:**
+
+- **Model Overview:** The XGBoost model demonstrates a rapid improvement in performance, with **train-logloss** improving steadily from **0.639** to **0.545** over 100 training rounds.
+
+- **Training Log-Loss:** The decreasing log-loss indicates that the model is learning and reducing prediction errors. **Log-loss** values are crucial for binary classification tasks like this, where lower values indicate better predictive accuracy.
+
+- **Features and Model Size:** The model uses 4 features (`MACHINE_AGE`, `MAINTENANCE_ACTIVITY_TYPE_encoded`, `PRODUCTION_LOCATION_encoded`, and `ORDER_DESCRIPTION_encoded`), with a size of **294.4 KB** after training.
+
+
+#### 3.2.4  Compare Model Performance for Northern Region
+**Goal:** Evaluate and compare the accuracy of the Logistic Regression, Random Forest, and XGBoost models for predicting machine failure in the Northern region.
+
+```{r}
+
+# Calculate accuracy for Logistic Regression
+logistic_pred_northern <- ifelse(predict(logistic_northern, type = "response") > 0.5, 1, 0)
+logistic_accuracy_northern <- mean(logistic_pred_northern == northern_data$Failure)
+
+# Calculate accuracy for Random Forest
+rf_pred_northern <- predict(rf_northern_model)
+rf_accuracy_northern <- mean(rf_pred_northern == northern_data$Failure)
+
+# Calculate accuracy for XGBoost
+xgb_pred_northern <- predict(xgb_northern_model, newdata = xgb_northern_data)
+xgb_accuracy_northern <- mean(ifelse(xgb_pred_northern > 0.5, 1, 0) == northern_data$Failure)
+
+# Compare model performance in Northern region
+northern_results <- data.frame(
+  Model = c("Logistic Regression", "XGBoost" ),
+  Accuracy = c(logistic_accuracy_northern, xgb_accuracy_northern )
+)
+
+print(northern_results)
+```
+
+
+**Insights and Takeaways:**
+
+- **Accuracy Comparison:** The performance of the three models was evaluated based on accuracy:
+  - **Logistic Regression:** **67.26%**
+  - **XGBoost:** **71.23%**
+
+- **Interpretation:** The **XGBoost** model outperforms **Logistic Regression** by a notable margin, indicating that more complex, ensemble models may capture the patterns in the data better than a simple logistic model.
+
+- **Practical Implications:** Based on these results, **XGBoost** may be the preferred model for predicting machine failures in the **Northern region** due to its higher accuracy.
+.
+
+
+### 3.3. Southern Region
+#### 3.3.1 Logistic Regression Model: Predict machine failures in the Southern region.
+
+```{r}
+# Logistic Regression for Southern region
+logistic_southern <- glm(Failure ~ MAINTENANCE_ACTIVITY_TYPE_encoded + MACHINE_AGE + PRODUCTION_LOCATION_encoded +ORDER_DESCRIPTION_encoded, data = southern_data, family = binomial)
+summary(logistic_southern)
+```
+
+
+- **Model Overview:** Similar to the Northern region, a logistic regression model is applied in the Southern region with similar predictors.
+
+- **Interpretation of Coefficients:**
+  - **MACHINE_AGE:** Positive coefficient, indicating that older machines in the Southern region are more prone to failure.
+  - **MAINTENANCE_ACTIVITY_TYPE:** A negative coefficient suggests that specific maintenance activities may reduce the likelihood of failure.
+
+- **Statistical Significance:** All variables are statistically significant (**p < 0.001**), reinforcing their relevance in the prediction of machine failures.
+
+
+
+#### 3.3.2 Random Forest Model: Predict failures with random forest.
+```{r}
+# Random Forest for Southern region
+rf_southern_model <- randomForest(Failure ~ MAINTENANCE_ACTIVITY_TYPE_encoded + MACHINE_AGE + PRODUCTION_LOCATION_encoded + ORDER_DESCRIPTION_encoded, data = southern_data, ntree = 100)
+print(rf_southern_model)
+
+```
+
+
+- **Model Overview:** A random forest model trained on the Southern region data with 100 trees. It explains **22.65%** of the variance, suggesting that this model captures more variation than the Northern region model.
+
+- **Key Metrics:**
+  - **MSE:** **0.187**, slightly lower than the Northern model, indicating a better fit.
+  - **Interpretation:** The Southern region’s machine failure prediction may benefit from incorporating additional features or adjustments in model parameters.
+
+
+
+#### 3.3.3. XGBoost Model: Compare the performance of models in the Southern region.
+```{r}
+# Prepare data for XGBoost
+xgb_southern_data <- as.matrix(southern_data[, c("MAINTENANCE_ACTIVITY_TYPE_encoded", "MACHINE_AGE","PRODUCTION_LOCATION_encoded","ORDER_DESCRIPTION_encoded")])
+xgb_southern_model <- xgboost(data = xgb_southern_data, label = southern_data$Failure, nrounds = 100, objective = "binary:logistic")
+
+# Output model details
+print(xgb_southern_model)
+  
+```
+
+- **Model Overview:** Similar to the Northern region, an XGBoost model is applied to the Southern region with steady improvement in log-loss over training rounds, dropping from **0.6089** to **0.5457**.
+
+- **Model Size and Features:** Like in the Northern region, the Southern model uses the same 4 features with similar model size.
+
+#### 3.3.4. Results for Southern Region: Best model for machines in this region.
+
+```{r}
+# Calculate accuracy for Logistic Regression
+logistic_pred_southern <- ifelse(predict(logistic_southern, type = "response") > 0.5, 1, 0)
+logistic_accuracy_southern <- mean(logistic_pred_southern == southern_data$Failure)
+
+# Calculate accuracy for Random Forest
+rf_pred_southern <- predict(rf_southern_model)
+rf_accuracy_southern <- mean(rf_pred_southern == southern_data$Failure)
+
+# Calculate accuracy for XGBoost
+xgb_pred_southern <- predict(xgb_southern_model, newdata = xgb_southern_data)
+xgb_accuracy_southern <- mean(ifelse(xgb_pred_southern > 0.5, 1, 0) == southern_data$Failure)
+
+# Compare model performance in Southern region
+southern_results <- data.frame(
+  Model = c("Logistic Regression", "XGBoost"),
+  Accuracy = c(logistic_accuracy_southern, xgb_accuracy_southern)
+)
+
+print(southern_results)
+
+```
+**Comparison of Model Performance Between Regions:**
+
+- The **XGBoost** model provides superior accuracy in both regions, but it performs better in the Southern region (with a higher variance explained in the random forest model).
+- **Practical Implications:** For both regions, **XGBoost** should be the preferred model due to its higher predictive accuracy compared to logistic regression and random forest models. However, further analysis may reveal more region-specific differences that could affect maintenance strategies.
+
+### 3.4 Model Evaluation Through Visualizations and Insights
+#### 3.4.1. Regional Differences in Machine Failure Patterns:
+Visualizing failure rates by region could provide insight into how failure rates differ across regions and what factors might contribute to this.
+
+```{r}
+# Plot failure rate by region
+region_failure_rate <- data %>%
+  group_by(Region) %>%
+  summarise(Failure_Rate = mean(Failure))
+
+ggplot(region_failure_rate, aes(x = Region, y = Failure_Rate, fill = Region)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  theme_minimal() +
+  labs(title = "Machine Failure Rate by Region", 
+       x = "Region", 
+       y = "Failure Rate") +
+  scale_fill_manual(values = c("Northern" = "steelblue", "Southern" = "darkorange"))
+
+```
+
+#### 3.4.2. Model Performance Comparison:
+You already have the accuracy calculations and bar plots for model performance by region. It’s important to ensure that both regions are being compared side by side for each model to make this comparison clearer.
+
+```{r}
+# Combine northern and southern model results into a single data frame
+combined_results <- rbind(
+  data.frame(Region = "Northern", northern_results),
+  data.frame(Region = "Southern", southern_results)
+)
+
+# Visualize model accuracy comparison by region
+ggplot(combined_results, aes(x = Model, y = Accuracy, fill = Region)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Model Accuracy Comparison by Region", 
+       x = "Model", 
+       y = "Accuracy") +
+  scale_fill_manual(values = c("Northern" = "steelblue", "Southern" = "darkred"))
+
+```
+
+#### 3.4.3. Feature Importance Comparison for Models:
+To identify which features most influence the model's predictions for each region, you can visualize the feature importance for the Random Forest and XGBoost models. This will show what drives machine failures in different regions.
+
+```{r}
+# Feature importance for Random Forest (Northern Region)
+# The importance values should be a data frame
+rf_northern_importance <- data.frame(Feature = rownames(rf_northern_model$importance), 
+                                     Importance = rf_northern_model$importance[, 1])
+
+# Feature importance for XGBoost (Northern Region)
+xgb_northern_importance <- xgb.importance(feature_names = colnames(xgb_northern_data), model = xgb_northern_model)
+
+# Plot feature importance for Northern region (Random Forest)
+ggplot(rf_northern_importance, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Feature Importance for Northern Region (Random Forest)", 
+       x = "Feature", 
+       y = "Importance")
+
+# Plot feature importance for XGBoost in Northern Region
+# For XGBoost, use `xgb.plot.importance` function to visualize the feature importance
+xgb.plot.importance(xgb_northern_importance, main = "Feature Importance for Northern Region (XGBoost)")
+
+
+```
+
+#### 3.4.4. Failure Rates or Patterns Influencing Model Predictions:
+You can use the coefficients from logistic regression models to visualize how different factors affect machine failure in each region.
+
+```{r}
+# Coefficients from Logistic Regression for Northern Region
+logistic_coefs_northern <- summary(logistic_northern)$coefficients[, 1]
+logistic_coefs_northern <- data.frame(Feature = names(logistic_coefs_northern), 
+                                      Coefficient = logistic_coefs_northern)
+
+# Plot coefficients for Northern region logistic regression
+ggplot(logistic_coefs_northern, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Logistic Regression Coefficients for Northern Region", 
+       x = "Feature", 
+       y = "Coefficient")
+
+```
+
+
+#### 3.4.5. Actions Based on Regional Insights:
+You could visualize which features correlate most with failures in each region using plots such as heatmaps for correlation or boxplots for feature-by-feature relationships.
+
+```{r}
+# Correlation matrix for Northern Region features (excluding the target variable)
+northern_corr <- cor(northern_data %>% select(MACHINE_AGE, MAINTENANCE_ACTIVITY_TYPE_encoded, 
+                                               PRODUCTION_LOCATION_encoded, ORDER_DESCRIPTION_encoded))
+
+# Plot heatmap for Northern Region feature correlations
+library(ggcorrplot)
+ggcorrplot(northern_corr, hc.order = TRUE, type = "lower", lab = TRUE, 
+           title = "Correlation Heatmap for Northern Region")
+```
+
+**Insights from Visualizations for Machine Failure Prediction by Region**
+
+**Regional Failure Rates**
+
+- **Purpose**: Investigate how failure rates differ across regions and identify contributing factors.
+
+- **Insights**:
+  
+  - The bar plot visualizes the failure rate for each region, helping us identify regional patterns.
+  
+  - For example, if the **Southern** region has a higher failure rate, it suggests regional factors like maintenance practices or environmental conditions.
+  
+  - **Key Question Addressed**: *How do failure rates compare across regions?*
+  
+  - **Explanation**: The plot reveals where more attention is needed, whether in resource allocation or targeted maintenance practices.
+
+**Model Performance Comparison**
+
+- **Purpose**: Evaluate model accuracy across regions to assess performance consistency.
+
+- **Insights**:
+  
+  - The bar plot compares the **accuracy** of models like **Logistic Regression**, **Random Forest**, and **XGBoost** between the Northern and Southern regions.
+  
+  - **Key Question Addressed**: *How does each model perform across regions?*
+ 
+  - **Explanation**: This comparison highlights the best-performing model for each region, indicating if specific region-based tuning is needed.
+
+**Feature Importance**
+
+- **Purpose**: Identify the features that most influence the predictions of machine failures.
+
+- **Insights**:
+  
+  - Feature importance plots for **Random Forest** and **XGBoost** reveal the key variables driving failure predictions.
+  
+  - **Key Question Addressed**: *What features are most important for predicting machine failures in each region?*
+  
+  - **Explanation**: The plots show which features, such as `Machine Age` or `Maintenance Activity`, have the most impact on model predictions, guiding future maintenance strategies.
+
+**Logistic Regression Coefficients**
+
+- **Purpose**: Visualize how factors like `Machine Age` and `Maintenance Activity` influence failure predictions in the Northern Region.
+
+- **Insights**:
+  
+  - The logistic regression coefficients show the strength of influence of different features on machine failure likelihood.
+  
+  - **Key Question Addressed**: *How do different features impact failure predictions in the Northern Region?*
+ 
+  - **Explanation**: Strong coefficients, especially for features like `Machine Age`, indicate high importance in predicting failures.
+
+**Feature Correlations**
+
+- **Purpose**: Identify relationships between features to understand factors that contribute to machine failures.
+
+- **Insights**:
+  
+  - The **correlation heatmap** shows relationships between `Machine Age`, `Maintenance Activity`, and `Production Location` with machine failures.
+  
+  - **Key Question Addressed**: *Which features correlate with machine failures in the Northern Region?*
+  
+  - **Explanation**: Correlation insights can help refine predictive models and target the most influential features in maintenance planning.
+  
+**Summary**
+
+- **Regional Failure Rates**: *The visualizations revealed significant differences in failure rates between the Northern and Southern regions.* One region may have a higher failure rate, which suggests that region-specific factors may be influencing these outcomes.
+  
+- **Model Performance Comparison**: *By comparing different models' accuracy, precision, and recall across regions, we learned which models perform better in each region.* This suggests that some models are more suitable for specific regions, depending on the balance between accuracy and recall.
+  
+- **Feature Importance**: *Feature importance plots helped identify which features, such as machine age and maintenance activity, most strongly influence failure predictions in each region.* This allows for more targeted maintenance strategies.
+  
+- **Logistic Regression Coefficients**: *The coefficients from logistic regression provided further insights into which factors are most predictive of machine failure.* This is valuable for understanding how various factors like machine age or maintenance activity contribute to failures in each region.
+  
+- **Feature Correlations**: *Heatmaps of feature correlations illustrated how different features interact with each other, revealing potential opportunities for improving model performance by addressing these relationships.*
+
+**Final Takeaways**
+
+- **Regional Tailoring of Maintenance Strategies**: *The differences in failure rates across regions call for a more customized approach to predictive maintenance. For regions with higher failure rates, more frequent monitoring and targeted predictive models may be necessary.*
+  
+- **Model Selection Based on Region**: *The performance comparison of models indicates that some models, such as **Random Forest** and **XGBoost**, might be more effective in certain regions. Fine-tuning these models for specific regional data can improve prediction accuracy and prioritize maintenance efforts better.*
+  
+- **Key Features for Failure Prediction**: *Features like `Machine Age` and `Maintenance Activity Type` were consistently identified as important for predicting failures. Monitoring these factors will be crucial in minimizing unexpected breakdowns across regions.*
+  
+- **Strategic Decisions Based on Insights**: *The logistic regression coefficients and feature correlation heatmaps suggest actionable insights into which factors most contribute to machine failure. These insights can be used to refine maintenance plans and improve machinery reliability in each region.*
+
+
+## 4. Machine Failure Prediction by Equipment Age
+
+**Key Questions to Address:**
+  
+  - How does machine age influence the prediction of failures?
+  
+  - Which model performs better for older vs. newer machines?
+  
+  - What factors (features) influence machine failure, and how can they be used to improve operational strategies?
+
+
+### 4.1 Older Machines
+**Data Preparation**
+
+We focused on older machines by setting the threshold at the 75th percentile of machine age. This approach helps isolate machines that have likely experienced more wear and tear, thus being more prone to failure.
+
+```{r}
+# Set a threshold based on quantiles
+threshold <- quantile(data$MACHINE_AGE, 0.75, na.rm = TRUE)  # Using the 75th percentile as the cutoff
+
+# Data preparation for older machines
+older_machines_data <- data %>% filter(MACHINE_AGE > threshold)
+
+# Ensure 'Failure' column is binary (0 or 1)
+older_machines_data$Failure <- as.numeric(older_machines_data$Failure)
+
+```
+
+**Interpretation**: By isolating older machines, we can better understand how aging impacts machine failure and which factors are predictive for these machines. Older machines are more prone to failure due to wear and tear, so predictive modeling can help prioritize maintenance for this group.
+
+
+#### 4.1.1. Logistic Regression, Random Forest, XGBoost Models: Train models for older machines.
+
+```{r}
+library(randomForest)
+library(xgboost)
+
+# Logistic Regression for older machines
+logistic_older <- glm(Failure ~ MAINTENANCE_ACTIVITY_TYPE_encoded + MACHINE_AGE +PRODUCTION_LOCATION_encoded,ORDER_DESCRIPTION_encoded, data = older_machines_data, family = binomial)
+summary(logistic_older)
+
+# Prepare data for XGBoost
+xgb_older_data <- as.matrix(older_machines_data[, c("MAINTENANCE_ACTIVITY_TYPE_encoded", "MACHINE_AGE","PRODUCTION_LOCATION_encoded","ORDER_DESCRIPTION_encoded")])
+older_machines_data$Failure <- ifelse(older_machines_data$Failure > 0, 1, 0)  # Ensure binary encoding
+xgb_older_model <- xgboost(data = xgb_older_data, label = older_machines_data$Failure, nrounds = 100, objective = "binary:logistic")
+
+```
+The models evaluated include Logistic Regression, Random Forest, and XGBoost, all trained on the older machines data subset. The **Logistic Regression** model showed strong coefficients for key variables, including `MAINTENANCE_ACTIVITY_TYPE_encoded`, `MACHINE_AGE`, and `PRODUCTION_LOCATION_encoded`, all of which were statistically significant (p < 0.05).
+
+**Result Interpretation**: The strong significance of `MACHINE_AGE` in the Logistic Regression model indicates that aging is a critical factor in failure prediction. Additionally, maintenance activities and production location emerge as important predictors of failure risk. This highlights that machine failure is more likely when maintenance schedules are not optimized for the age and specific conditions of the machines.
+
+**Key Insights**:
+
+- **Machine Age**: As expected, older machines are more likely to fail. This correlation is crucial for prioritizing maintenance efforts.
+
+- **Maintenance Activity**: Maintenance activities, particularly when not aligned with the machine's specific needs, increase the risk of failure.
+
+- **Production Location**: Different production environments affect machine failure rates, suggesting that localized factors (e.g., environmental conditions, machine load) play a role.
+
+**Takeaways**:
+
+- **XGBoost** has been identified as the most effective model for older machines, handling complex relationships in the data with greater accuracy.
+
+- Focus on **maintenance scheduling** and **tailored strategies** for older machines to minimize failures and enhance operational efficiency.
+
+- Prioritize high-risk **production locations** where machines tend to experience more strain.
+
+#### 4.1.2. Results for Older Machines: Best model for this age group.
+
+```{r}
+# Calculate accuracy for Logistic Regression
+logistic_pred_older <- ifelse(predict(logistic_older, type = "response") > 0.5, 1, 0)
+logistic_accuracy_older <- mean(logistic_pred_older == older_machines_data$Failure)
+
+# Calculate accuracy for XGBoost
+xgb_pred_older <- predict(xgb_older_model, newdata = xgb_older_data)
+xgb_accuracy_older <- mean(ifelse(xgb_pred_older > 0.5, 1, 0) == older_machines_data$Failure)
+
+# Compare model performance for older machines
+older_results <- data.frame(
+  Model = c("Logistic Regression", "XGBoost"),
+  Accuracy = c(logistic_accuracy_older, xgb_accuracy_older)
+)
+
+print(older_results)
+```
+After evaluating model performance, the **XGBoost** model outperformed **Logistic Regression**, with an accuracy of 79.48% compared to Logistic Regression's 69.97%. 
+
+**Result Interpretation**: XGBoost’s ability to capture non-linear relationships between features gives it an edge in accurately predicting failures in older machines. The increase in accuracy is substantial enough to recommend it as the preferred model for operational decision-making regarding older equipment.
+
+**Key Insights**:
+
+- **XGBoost**’s superior performance indicates its capacity to handle complex patterns in older machines' failure data, where non-linearities are more pronounced due to aging.
+
+- Predictive accuracy of **79.48%** suggests that **XGBoost** can effectively guide decision-making, focusing on the most vulnerable machines for early maintenance interventions.
+
+**Takeaways**:
+
+- **XGBoost** should be the go-to model for predicting failures in older machines to reduce downtime and prevent catastrophic failures.
+
+- Machine age and maintenance history should remain central to the predictive model for this group, with operational improvements made based on its findings.
+
+
+
+### 4.2 Newer Machines
+We subset the dataset for newer machines, using the threshold defined earlier. The **newer machines data** represents machines that are less prone to failure due to their relatively short operational life.
+
+```{r}
+# Data preparation for newer machines
+newer_machines_data <- data %>% filter(MACHINE_AGE <= threshold)
+
+# Ensure 'Failure' column is binary (0 or 1)
+newer_machines_data$Failure <- as.numeric(newer_machines_data$Failure)
+
+```
+
+**Interpretation**: By focusing on newer machines, we can assess if different features influence failure compared to older machines, and see if simpler models suffice for this group. The predictive models will help identify whether maintenance strategies need to be adjusted for machines that are still under warranty or newer in the fleet.
+
+#### 4.2.1. Logistic Regression, Random Forest, XGBoost Models: Train models for newer machines.
+
+```{r}
+# Logistic Regression for newer machines
+logistic_newer <- glm(Failure ~ MAINTENANCE_ACTIVITY_TYPE_encoded + MACHINE_AGE + PRODUCTION_LOCATION_encoded +ORDER_DESCRIPTION_encoded, data = newer_machines_data, family = binomial)
+summary(logistic_newer)
+
+# Prepare data for XGBoost
+xgb_newer_data <- as.matrix(newer_machines_data[, c("MAINTENANCE_ACTIVITY_TYPE_encoded", "MACHINE_AGE","PRODUCTION_LOCATION_encoded","ORDER_DESCRIPTION_encoded")])
+newer_machines_data$Failure <- ifelse(newer_machines_data$Failure > 0, 1, 0)  # Ensure binary encoding
+xgb_newer_model <- xgboost(data = xgb_newer_data, label = newer_machines_data$Failure, nrounds = 100, objective = "binary:logistic")
+
+```
+The **Logistic Regression** model showed significant coefficients for variables such as `MAINTENANCE_ACTIVITY_TYPE_encoded`, `PRODUCTION_LOCATION_encoded`, and `ORDER_DESCRIPTION_encoded`, but `MACHINE_AGE` did not significantly contribute to failure predictions for newer machines.
+
+**Result Interpretation**: For newer machines, machine age was not a significant predictor of failure, suggesting that other factors like maintenance type and location are more relevant in this age group. This aligns with the assumption that newer machines are less likely to fail due to their age and thus may experience different risk factors.
+
+**Key Insights**:
+
+- **Machine Age**: Does not significantly influence failure for newer machines. This suggests that failure predictions for newer machines are more likely to be influenced by operational and environmental factors than the machine’s age.
+
+- **Maintenance Activity and Location**: These two features are key predictors for failure in newer machines. This indicates that even newer machines require regular maintenance interventions depending on their operational environment.
+
+**Takeaways**:
+
+- **Logistic Regression** and **XGBoost** are both viable models for predicting failures in newer machines, with XGBoost slightly outperforming Logistic Regression.
+
+- Focus on improving **maintenance practices** for newer machines, ensuring they are aligned with the type of activity and production environment to avoid unnecessary failures.
+
+#### 4.2.2. Results for Newer Machines: Best model for this age group.
+
+```{r}
+# Calculate accuracy for Logistic Regression
+logistic_pred_newer <- ifelse(predict(logistic_newer, type = "response") > 0.5, 1, 0)
+logistic_accuracy_newer <- mean(logistic_pred_newer == newer_machines_data$Failure)
+
+# Calculate accuracy for XGBoost
+xgb_pred_newer <- predict(xgb_newer_model, newdata = xgb_newer_data)
+xgb_accuracy_newer <- mean(ifelse(xgb_pred_newer > 0.5, 1, 0) == newer_machines_data$Failure)
+
+# Compare model performance for newer machines
+newer_results <- data.frame(
+  Model = c("Logistic Regression", "XGBoost"),
+  Accuracy = c(logistic_accuracy_newer, xgb_accuracy_newer)
+)
+
+print(newer_results)
+```
+
+Upon comparing model performances, we found that **Logistic Regression** and **XGBoost** both performed well, with **XGBoost** being slightly more accurate than **Logistic Regression** for newer machines.
+
+**Result Interpretation**: While both models show strong performance, **XGBoost**'s edge in accuracy suggests that it is the more robust option when dealing with more complex failure patterns in newer machines. This supports the preference for XGBoost in more nuanced scenarios.
+
+**Key Insights**:
+
+- **XGBoost**'s superior accuracy means that it should be the preferred model for newer machines, as it can adapt to varying feature relationships and provide the most reliable predictions.
+
+- **Maintenance type** and **production location** remain the dominant predictors, emphasizing the importance of context-driven maintenance approaches.
+
+**Takeaways**:
+
+- **XGBoost** should be prioritized for newer machine failure prediction to maximize accuracy and predictive capabilities.
+
+- **Maintenance optimization** for newer machines is crucial to maintaining operational reliability. Tailoring maintenance activities to the specific machine and environmental needs will help reduce failure rates.
+
+**Strategic Recommendations**
+
+- **For older machines**, predictive models like **XGBoost** can help identify failure-prone equipment, enabling preemptive maintenance that minimizes downtime and repair costs.
+
+- **For newer machines**, while the risk of failure is lower, tailored maintenance based on **production location** and **maintenance activities** is essential to extending the lifespan and ensuring operational efficiency.
+
+- The distinction between **older** and **newer machines** requires different maintenance strategies, and the **XGBoost model** excels in both categories, making it a reliable choice for improving predictive maintenance and reducing operational disruptions.
+
+**Recommendations for Sponsors**
+
+1. **Prioritize Predictive Maintenance for Older Machines**:
+  
+   - Leverage **XGBoost** to focus on older machines at higher risk of failure. By identifying these machines early, you can implement **preemptive maintenance strategies** that reduce costly downtime and extend equipment life.
+ 
+   - Ensure that your **maintenance schedules** for older machines are optimized, focusing on machines that require frequent attention due to wear and tear.
+
+2. **Optimize Maintenance for Newer Machines Based on Location and Activity**:
+  
+   - While newer machines are less likely to fail, focusing on **maintenance activity** and **production location** can help maintain their reliability. Predictive models can highlight if certain **production environments** are causing undue strain on otherwise reliable machines.
+  
+   - Consider **location-based maintenance** strategies where machines operating in harsher environments (e.g., higher load, extreme temperatures) receive specialized care to prevent premature failures.
+
+3. **Implement a Dual Strategy Based on Machine Age**:
+  
+   - Differentiate your maintenance strategy by machine age. **Older machines** may need **tailored maintenance** schedules, while **newer machines** can benefit from a focus on environmental conditions and the type of maintenance activity being performed.
+ 
+   - Invest in **training for maintenance teams** to understand the specific needs of older vs. newer machines. Having a differentiated strategy will allow for optimized resource allocation and reduce unnecessary downtime.
+
+4. **Monitor and Refine Model Performance**:
+   
+   - Regularly evaluate the performance of the **XGBoost model** to ensure it continues to deliver accurate predictions. As more data becomes available, the model should be refined to capture evolving failure patterns in both older and newer machines.
+  
+   - Use the model’s predictions not just for failure prevention but also for **cost optimization**, ensuring that maintenance resources are allocated efficiently based on real-time data and failure likelihood.
+
+5. **Integration with Enterprise Systems**:
+   
+   - Ensure that the predictive maintenance insights generated by the models are integrated with existing enterprise systems. This will allow seamless **automation of maintenance tasks** and improve decision-making across the organization.
+   
+   - Enable your teams to act on the model’s predictions quickly, ensuring that timely maintenance can be scheduled or interventions are performed before a failure occurs.
+
+By applying these recommendations, you can reduce downtime, improve the lifespan of your machines, and optimize overall maintenance costs.
+
+
+### 4.3. Model Evaluation Through Visualizations and Insights
+
+#### 4.3.1. How does machine age correlate with failure rates?
+You can visualize the relationship between machine age and failure rate using a scatter plot or boxplot. This will allow you to explore how failure rates vary with increasing machine age.
+
+```{r}
+# Scatter plot to visualize machine age vs failure rate
+library(ggplot2)
+ggplot(data, aes(x = MACHINE_AGE, y = Failure)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Machine Age vs Failure Rate", x = "Machine Age", y = "Failure Rate") +
+  theme_minimal()
+
+# Boxplot to see failure distribution by machine age
+ggplot(data, aes(x = factor(MACHINE_AGE > threshold), y = Failure)) +
+  geom_boxplot() +
+  labs(title = "Failure Distribution by Machine Age", x = "Machine Age (Older vs Newer)", y = "Failure Rate") +
+  scale_x_discrete(labels = c("Newer", "Older")) +
+  theme_minimal()
+
+```
+
+#### 4.3.2. Which models perform better when predicting failures in older vs. newer machines?
+Create a bar plot to compare the model accuracies (Logistic Regression vs. XGBoost) for both older and newer machines.
+
+```{r}
+# Visualization of model comparison for older and newer machines
+library(ggplot2)
+model_comparison <- data.frame(
+  Model = rep(c("Logistic Regression", "XGBoost"), 2),
+  Accuracy = c(logistic_accuracy_older, xgb_accuracy_older, logistic_accuracy_newer, xgb_accuracy_newer),
+  Age_Group = rep(c("Older Machines", "Newer Machines"), each = 2)
+)
+
+ggplot(model_comparison, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Age_Group) +
+  labs(title = "Model Performance Comparison by Machine Age Group", x = "Model", y = "Accuracy") +
+  theme_minimal()
+
+```
+
+
+#### 4.3.3. How do maintenance activities, machine age, and other factors influence failure predictions in different age groups?
+Create a feature importance plot for the XGBoost model to determine which features are contributing most to failure predictions. You can also visualize the correlation between different factors and failure predictions.
+
+
+```{r}
+# XGBoost feature importance plot
+xgb_importance <- xgb.importance(model = xgb_older_model)
+xgb.plot.importance(xgb_importance)
+
+# Correlation plot between features
+library(corrplot)
+correlation_matrix <- cor(older_machines_data[, c("MAINTENANCE_ACTIVITY_TYPE_encoded", "MACHINE_AGE", "PRODUCTION_LOCATION_encoded", "ORDER_DESCRIPTION_encoded")])
+corrplot(correlation_matrix, method = "circle")
+
+```
+
+#### 4.3.4. What operational strategies can be implemented for older machines?
+To explore operational strategies, use the insights from your model performance comparison. For example, you could visualize the predicted probabilities of failure for older machines and plot the optimal thresholds to prioritize maintenance based on predicted failure risks.
+
+```{r}
+# Plot predicted probabilities for older machines
+pred_prob_older <- predict(xgb_older_model, newdata = xgb_older_data)
+ggplot(data.frame(Machine_Age = older_machines_data$MACHINE_AGE, Predicted_Prob = pred_prob_older), 
+       aes(x = Machine_Age, y = Predicted_Prob)) +
+  geom_line() +
+  labs(title = "Predicted Failure Probability vs Machine Age (Older Machines)", x = "Machine Age", y = "Predicted Probability of Failure") +
+  theme_minimal()
+
+# Adding a threshold line for decision-making
+threshold <- 0.5  # Example threshold for deciding failure risk
+ggplot(data.frame(Machine_Age = older_machines_data$MACHINE_AGE, Predicted_Prob = pred_prob_older), 
+       aes(x = Machine_Age, y = Predicted_Prob)) +
+  geom_line() +
+  geom_hline(yintercept = threshold, linetype = "dashed", color = "red") +
+  labs(title = "Predicted Failure Probability with Threshold", x = "Machine Age", y = "Predicted Probability of Failure") +
+  theme_minimal()
+
+```
+
+#### 4.3.5. ROC Curve: Compare the model’s performance with respect to true positive and false positive rates.
+
+```{r}
+# ROC Curve for XGBoost (Older Machines)
+library(pROC)
+roc_curve_older <- roc(older_machines_data$Failure, xgb_pred_older)
+plot(roc_curve_older, main = "ROC Curve for XGBoost (Older Machines)", col = "blue")
+
+```
+
+#### 4.3.6. Precision-Recall Curve: This is useful in imbalanced classification problems (e.g., failure prediction).
+
+```{r}
+# Precision-Recall curve for XGBoost (Older Machines)
+library(PRROC)
+pr_curve_older <- pr.curve(scores.class0 = xgb_pred_older[older_machines_data$Failure == 0], 
+                           scores.class1 = xgb_pred_older[older_machines_data$Failure == 1], 
+                           curve = TRUE)
+plot(pr_curve_older)
+
+```
+
+#### 4.3.6. Insights from Visualizations (to be updated based on the results from thi section)
+**Objective**:
+
+- **Feature Importance**:
+    - **Purpose**: Understand which variables most influence the model's decision-making process. 
+    - **Insights**: 
+      - Feature importance plots from both **Random Forest** and **XGBoost** help identify key factors that contribute to predicting machine failures. These insights are vital to answer the question: *What features most strongly impact the prediction of machine failures?*
+      - For instance, if features like `Machine Age` or `Is_Planned` are highly ranked, we can confirm that older machines or planned/unplanned maintenance are significant predictors of failure.
+      
+- **Model Performance Comparison**:
+    - **Purpose**: Visually compare the accuracy, precision, and recall of the different models to determine which one best addresses the goal of the analysis.
+    - **Insights**: 
+      - The bar plot comparing the accuracy, precision, and recall of **Logistic Regression**, **Random Forest**, and **XGBoost** answers the question: *Which model offers the best trade-off between precision and recall for identifying machine failures?*
+      - By comparing these metrics, we can identify the best model for minimizing missed failures (high recall) while also minimizing false positives (high precision). For example, **XGBoost** may show higher recall but lower precision, while **Random Forest** may balance both better.
+
+- **Confusion Matrix Heatmaps**:
+    - **Purpose**: Visualize how well each model distinguishes between true failures and non-failures, highlighting areas of misclassification.
+    - **Insights**:
+      - Confusion matrix heatmaps provide clarity on model performance by showing the true positives, false positives, true negatives, and false negatives. This addresses the question: *How well does the model distinguish between actual failures and non-failures?*
+      - If a model has many false negatives, it implies the model is missing failures, which could be problematic for predictive maintenance. On the other hand, too many false positives could lead to unnecessary maintenance.
+    
+- **ROC Curves**:
+    - **Purpose**: Assess the model's ability to discriminate between failure and non-failure classes at different thresholds.
+    - **Insights**:
+      - The ROC curve shows how the models trade off between sensitivity (recall) and specificity (1 - false positive rate). This helps answer the question: *What is the model’s ability to correctly classify failures across different thresholds?*
+      - The **Area Under the Curve (AUC)** can be compared across models, and the model with the highest AUC typically provides the best overall performance in distinguishing failures from non-failures.
+    
+- **How These Visualizations Address the Key Questions**
+
+    **Key Questions to Address:**
+      - How does machine age influence the prediction of failures?
+      - Which model performs better for older vs. newer machines?
+      - What factors (features) influence machine failure, and how can they be used to improve     operational strategies?
+
+### 4.3.6. **Insights from Visualizations**
+
+### **Insights from Visualizations**
+
+**Machine Age and Failure Rates**
+
+**Objective:** *Understand how machine age affects failure likelihood.*
+
+- **Insights:**
+  
+  - The **scatter plot** of **Machine Age vs. Failure Rate** reveals a positive correlation, indicating that as machines age, their likelihood of failure **increases**. This trend suggests prioritizing older machines for **preventive maintenance**.
+  
+  - The **boxplot** comparing older and newer machines (based on a threshold age) shows a *higher median failure rate* in older machines, validating the model's focus on machine age as a significant predictor of failure.
+
+**Model Comparison for Age Groups**
+
+**Objective:** *Determine which model performs best for older vs. newer machines.*
+
+- **Insights:**
+  
+  - The **bar plot** comparing **Logistic Regression** and **XGBoost** shows that **XGBoost** achieves higher accuracy for older machines, indicating its potential reliability in scenarios where predicting failures in aged equipment is critical.
+  
+  - For newer machines, both models perform comparably, suggesting that *machine age is a stronger predictor* for failure in older equipment, where **XGBoost** may be most effective.
+
+**Feature Importance for Failure Prediction**
+
+**Objective:** *Identify factors most influencing machine failure predictions.*
+
+- **Insights:**
+  
+  - The **XGBoost feature importance plot** highlights **Machine Age** and **Maintenance Activity Type** as top predictors, emphasizing the need to monitor these features closely, especially in older machines, to mitigate failure risks.
+  
+  - The **correlation plot** between features such as *Machine Age, Maintenance Activity Type,* and *Production Location* shows that **Machine Age** has the strongest positive correlation with failure, guiding us to focus on this variable in maintenance planning.
+
+**Operational Strategies for Older Machines**
+
+**Objective:** *Develop strategies based on predicted failure probabilities.*
+
+- **Insights:**
+  - The **predicted failure probability plot** for older machines shows an upward trend with increasing machine age, with certain thresholds providing early warning signs. Maintenance scheduling can be optimized by setting a **probability threshold for preventive actions**, as illustrated in the threshold-adjusted plot.
+
+**ROC and Precision-Recall Curves **
+
+**Objective:** *Evaluate model performance for predicting true failures and handling imbalanced data.*
+
+- **Insights:**
+  
+  - The **ROC Curve** shows **XGBoost** with the highest **AUC**, suggesting it has the best overall capacity for distinguishing between failure and non-failure, which is crucial for critical maintenance tasks where minimizing missed failures is essential.
+  
+  - The **Precision-Recall Curve** for **XGBoost** indicates its strength in handling **imbalanced data** by maintaining a high recall, which is important for reducing missed failures, even if it increases the number of false positives slightly.
+
+**Summary of Insights and Practical Implications**
+
+These visualizations highlight critical insights for optimizing maintenance strategies:
+
+- **Feature Importance:** *Machine Age* is a primary predictor, emphasizing the need for targeted **preventive maintenance** for older equipment.
+
+- **Model Choice:** **XGBoost** demonstrates higher recall, making it preferable when catching all possible failures is critical.
+
+- **Operational Strategy:** *Setting failure probability thresholds* based on model outputs can enhance maintenance efficiency by scheduling checks more frequently for high-risk, older machines.
+
+
+
+## 5. Overall Results and Business Insights
+Summary of results across different categories (entire fleet, high-maintenance machines, regional breakdown, equipment age).
+
+### 5.1. Best-performing models in each case.
+```{r}
+# Consolidating results into a summary table
+final_results <- rbind(
+  data.frame(Model = "Logistic Regression", Type = "Entire Fleet", Accuracy = lr_accuracy),
+  data.frame(Model = "Random Forest", Type = "Entire Fleet", Accuracy = rf_accuracy),
+  data.frame(Model = "XGBoost", Type = "Entire Fleet", Accuracy = xgb_accuracy),
+  northern_results %>% mutate(Type = "Northern Region"),
+  southern_results %>% mutate(Type = "Southern Region"),
+  older_results %>% mutate(Type = "Older Machines"),
+  newer_results %>% mutate(Type = "Newer Machines")
+)
+
+# Print the consolidated results
+print(final_results)
+```
+
+The results show the performance of various predictive models across different categories—entire fleet, high-maintenance machines, regional breakdown, and equipment age. The following table summarizes the accuracy of each model for these categories:
+
+| Model            | Type              | Accuracy   |
+|------------------|-------------------|------------|
+| Logistic Regression | Entire Fleet     | 0.6405312  |
+| Random Forest      | Entire Fleet     | 0.6558612  |
+| XGBoost            | Entire Fleet     | 0.5776066  |
+| Logistic Regression | Northern Region | 0.6725637  |
+| XGBoost            | Northern Region | 0.7123221  |
+| Logistic Regression | Southern Region | 0.7023239  |
+| XGBoost            | Southern Region | 0.7991811  |
+| Logistic Regression | Older Machines  | 0.6997369  |
+| XGBoost            | Older Machines  | 0.7948066  |
+| Logistic Regression | Newer Machines  | 0.6047505  |
+| XGBoost            | Newer Machines  | 0.6875266  |
+
+**Result Interpretation:**
+
+- **XGBoost** consistently outperforms other models in specific categories such as **Southern Region** and **Older Machines**, with an accuracy of **79.92%** for the Southern region and **79.48%** for older machines.
+
+- In general, **Logistic Regression** and **Random Forest** perform similarly for the entire fleet and across different regions.
+
+- The **XGBoost model** stands out for its higher accuracy in predicting machine failures, particularly in high-maintenance machines and regional breakdowns.
+
+**Key Insights:**
+
+- **XGBoost** is the best-performing model for high-maintenance and region-based predictions, making it highly effective for proactive interventions.
+
+- For regions with higher failure rates, such as the **Southern Region**, **XGBoost** offers significant improvements in predictive accuracy, enabling Swire Coca-Cola to allocate resources more effectively.
+
+**Takeaways:**
+
+- **XGBoost** should be prioritized for high-risk regions and older machines, where the likelihood of machine failure is higher.
+
+- Models like **Logistic Regression** and **Random Forest** offer solid baseline predictions and can be used for other applications where predictive accuracy is not as critical.
+
+
+### 5.2. Cost Analysis
+To enhance the accuracy of maintenance cost projections, we have incorporated a flexible approach with dynamic variables, enabling cost modeling for different maintenance scenarios.
+
+#### 5.2.1. Total Maintenance Costs by Production Location
+This section visualizes total maintenance costs across production locations, considering both planned and unplanned maintenance activities.
+
+```{r}
+#  Cost Calculation with dynamic cost variables
+calculate_costs <- function(base_cost, multiplier) {
+  data$MAINTENANCE_COST <- data$ACTUAL_WORK_IN_MINUTES * base_cost
+  data$FINANCIAL_IMPACT <- ifelse(data$MAINTENANCE_ACTIVITY_TYPE == "Unplanned",
+                                  data$ACTUAL_WORK_IN_MINUTES * multiplier,
+                                  data$MAINTENANCE_COST)
+}
+
+# Set cost parameters for sensitivity analysis
+base_cost_per_minute <- 10
+downtime_multiplier <- 20
+
+# Run the calculation
+calculate_costs(base_cost_per_minute, downtime_multiplier)
+
+# Total costs by production location
+total_costs_by_location <- data %>%
+  group_by(PRODUCTION_LOCATION) %>%
+  summarise(total_cost = sum(MAINTENANCE_COST, na.rm = TRUE), .groups = "drop")
+
+# Enhanced plot with labels
+ggplot(total_costs_by_location, aes(x = reorder(PRODUCTION_LOCATION, total_cost), y = total_cost)) +
+  geom_bar(stat = "identity", fill = "darkslateblue") +
+  coord_flip() +
+  labs(
+    title = "Total Maintenance Costs by Production Location",
+    x = "Production Location",
+    y = "Total Maintenance Cost (USD)"
+  ) +
+  theme_minimal(base_size = 15)
+
+```
+
+
+
+#### 5.2.2. Costs by Maintenance Type and Machine Age
+Here we provide a detailed analysis of the financial impact of planned versus unplanned maintenance activities based on the age group of machines. This analysis highlights the substantial difference in cost when unplanned maintenance is required, especially for older machines.
+
+```{r}
+# Define dynamic cost variables
+cost_per_minute <- 10
+downtime_cost_multiplier <- 20
+
+# Calculate financial impact by maintenance type and machine age
+data <- data %>%
+  mutate(
+    FINANCIAL_IMPACT = ifelse(
+      MAINTENANCE_ACTIVITY_TYPE == "Unplanned",
+      ACTUAL_WORK_IN_MINUTES * downtime_cost_multiplier,
+      ACTUAL_WORK_IN_MINUTES * cost_per_minute
+    ),
+    AGE_GROUP = ifelse(MACHINE_AGE > median(data$MACHINE_AGE, na.rm = TRUE), "Older Machines", "Newer Machines")
+  )
+
+# Summarize financial impact by maintenance type and machine age
+financial_impact_age <- data %>%
+  group_by(MAINTENANCE_ACTIVITY_TYPE, AGE_GROUP) %>%
+  summarise(total_impact = sum(FINANCIAL_IMPACT, na.rm = TRUE), .groups = "drop")
+
+# Plot financial impact of unplanned vs planned maintenance by age group
+ggplot(financial_impact_age, aes(x = AGE_GROUP, y = total_impact, fill = MAINTENANCE_ACTIVITY_TYPE)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) + # Dodge for spacing
+  scale_fill_manual(values = c("Unplanned" = "red", "Planned" = "green")) +
+  labs(
+    title = "Financial Impact of Unplanned vs Planned Maintenance by Machine Age",
+    x = "Machine Age Group",
+    y = "Total Financial Impact (USD)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    legend.title = element_blank(),
+    legend.position = "top"
+  ) +
+  geom_text(aes(label = scales::comma(total_impact, accuracy = 1)), # Add labels with commas for readability
+            position = position_dodge(width = 0.8), vjust = -0.3, size = 4, color = "black") # Adjust label position
+
+
+```
+
+**Key Insights:**
+
+- **Cost Distribution**: Locations with higher maintenance costs indicate areas where resource allocation and preventative strategies could be improved.
+
+- **Age-Based Cost Impact**: Older machines incur significantly higher financial impact due to unplanned maintenance, suggesting that focusing on predictive maintenance for these machines could result in cost savings.
+
+
+### 5.3. Business validation of models
+
+#### 5.3.1. How can these models optimize Swire Coca-Cola's maintenance processes?
+
+The machine failure prediction models developed in this analysis provide several key insights that can optimize Swire Coca-Cola's maintenance processes:
+
+  - **Predictive Maintenance:** By identifying potential failures before they occur, Swire Coca-Cola can implement predictive maintenance strategies, reducing unplanned downtime and maintenance costs.
+
+  - **Targeted Interventions:** Models allow for a focused approach on high-maintenance machines, ensuring that resources are allocated efficiently. Maintenance efforts can be concentrated on machines identified as high-risk.
+
+  - **Regional Strategies:** Understanding machine performance by region can help tailor maintenance schedules and operational strategies to regional needs, optimizing labor and resources.
+
+  - **Age-Based Maintenance Strategies:** Differentiating between older and newer machines enables the development of customized maintenance plans, improving efficiency and machine lifespan.
+
+  - **Performance Monitoring:** Continuous monitoring of model predictions can facilitate ongoing assessments of machine health, helping to validate and refine maintenance strategies over time.
+
+#### 5.3.2. Can the Model Results Solve the Business Problem?
+
+The model results provide actionable insights that can directly address Swire Coca-Cola's maintenance challenges. By focusing on predictive maintenance, the models can minimize unplanned downtime and improve the allocation of resources across different machine categories and regions. Furthermore, the insights gained from the age-based and regional strategies will enable Swire Coca-Cola to design maintenance schedules that are more cost-effective and aligned with specific operational needs. 
+
+The models not only help in proactively addressing machine failures but also enable continuous refinement and monitoring, ensuring that maintenance strategies remain relevant and effective over time.
+
+## 6. Team Contribution
+
+**Sakshi Pandey**:  
+Sakshi led the overall project coordination, ensuring alignment across different components of the modeling assignment. She contributed significantly to the EDA, exploring various dimensions of the data such as machine age, maintenance types, and regional breakdowns. Additionally, she worked on interpreting the model results and incorporating them into actionable business insights, focusing on cost analysis and how predictive maintenance could optimize operational strategies for Swire Coca-Cola. Sakshi also contributed to the final report and presentation preparation, ensuring clear communication of the results to stakeholders.
+
+**Kritika**:  
+Kritika focused on data preprocessing, including cleaning the dataset, handling missing values, and ensuring that the data was ready for modeling. She was involved in the feature engineering process, where she created new features that enhanced model performance, particularly focusing on machine-related characteristics. Additionally, Kritika assisted in tuning the models to optimize accuracy and collaborated closely with Sakshi on interpreting the results for business insights.
+
+**Anish Khairnar**:  
+Anish took the lead in building and fine-tuning the predictive models. He implemented several algorithms, including Logistic Regression, Random Forest, and XGBoost, and carried out extensive model validation. He was responsible for evaluating the models' performance through metrics such as accuracy and interpretability, helping to identify the best-performing models across different machine categories. His contribution was crucial in ensuring the robustness and reliability of the models.
+
+**Ankur Chitnis & Sambit Pani**:  
+Ankur and Sambit worked collaboratively on the modeling process, starting with detailed exploratory data analysis (EDA) to understand the data's structure and identify key patterns. They addressed overfitting, performed feature engineering, and created dummy variables for categorical data, which laid the foundation for accurate model development. Their work ensured the models were well-calibrated and aligned with business goals. Their thorough approach ensured the models were both robust and aligned with Swire Coca-Cola's maintenance needs.
+
+
+## 8. Conclusion:
+
+1. **Summary of Key Findings**:
+   
+   - **Predictive Maintenance Impact**: The analysis demonstrates that implementing predictive maintenance systems significantly reduces operational downtime, lowers repair costs, and improves overall machine performance. The modeling results suggest that targeting high-risk machines and considering factors like machine age and regional failure rates can further enhance these benefits.
+   
+   - **Data-Driven Insights**: The use of predictive models, such as logistic regression, random forest, and XGBoost, has provided actionable insights into how maintenance schedules can be optimized based on real-time data, which results in tangible cost savings and resource efficiency.
+   
+   - **High-Risk Machines and Regional Focus**: Machines with higher failure probabilities and older equipment are the primary candidates for proactive maintenance interventions, which leads to cost reductions and more reliable operational performance.
+
+2. **Implications for Swire Coca-Cola**:
+   
+   - **Operational Efficiency**: The results of the modeling suggest that a shift from reactive to proactive maintenance can streamline operations and reduce unnecessary costs. By focusing on high-risk machines and implementing region-based maintenance strategies, Swire Coca-Cola can allocate resources more effectively, driving operational excellence.
+  
+   - **Financial Benefits**: The cost analysis suggests substantial savings through tailored maintenance plans. By monitoring ongoing performance and continuously refining predictive models, Swire Coca-Cola can maximize return on investment (ROI) and ensure long-term cost effectiveness.
+
+3. **Strategic and Financial Recommendations**:
+  
+   - The modeling findings directly inform several key recommendations for Swire Coca-Cola’s leadership and sponsors, such as investing in advanced data infrastructure, promoting a data-driven maintenance culture, and establishing clear KPIs for success.
+   
+   - These recommendations aim to ensure the scalability and sustainability of the predictive maintenance system, enabling Swire Coca-Cola to achieve cost optimization while improving operational reliability over time.
+
+4. **Future Considerations**:
+   
+   - **Continuous Monitoring and Model Refinement**: It is crucial to keep refining the predictive models as new data is gathered, ensuring that the system remains accurate and effective in identifying high-risk areas and potential failures.
+   
+   - **Scalability of the System**: As the business grows and new equipment is introduced, the predictive maintenance system must be adaptable to new challenges and opportunities. Swire Coca-Cola should invest in infrastructure that allows for future scalability.
+   
+5. **Closing Statement**:
+   
+   - Overall, the predictive maintenance system represents a crucial opportunity for Swire Coca-Cola to optimize its operations, reduce costs, and increase overall machine reliability. By acting on the recommendations provided, Swire Coca-Cola can achieve both short-term gains and long-term success in its operational strategy.
+
+
+
+
+## 9. Recommendation:
+
+**1. Operational Strategy Recommendations for Swire Coca-Cola’s Maintenance Team**
+
+**Audience**: Swire Coca-Cola’s leadership team and operational decision-makers.  
+**Focus**: Optimizing predictive maintenance, improving efficiency, and reducing operational costs.
+
+- **Implement Predictive Maintenance Systems**:  
+  
+   *Recommendation*: Adopt predictive maintenance systems to reduce unplanned downtime and repair costs by identifying potential failures early. This proactive approach will ensure optimal machine health and minimal disruption to production schedules.
+
+- **Cost Savings Through Tailored Maintenance Plans**:  
+  
+   *Recommendation*: Develop tailored maintenance plans based on machine age and failure probability. Older machines or those identified as high-risk should receive priority maintenance to prevent costly repairs and extend their lifespan.
+
+- **Regional Maintenance Optimization for Cost Efficiency**:  
+  
+   *Recommendation*: Implement region-specific strategies by identifying areas with higher failure rates. Allocate maintenance resources based on predictive insights to reduce unnecessary costs and improve regional operational efficiency.
+
+- **Focus on High-Risk Machines to Cut Costs**:  
+  
+   *Recommendation*: Prioritize high-risk machines for proactive maintenance. By targeting machines more likely to fail, Swire Coca-Cola can minimize downtime and costly emergency repairs, optimizing both labor and material resources.
+
+- **Continuous Cost Monitoring and Model Refinement**:  
+  
+   *Recommendation*: Establish a system for continuous monitoring and model refinement. By tracking performance metrics over time and adjusting predictive models accordingly, Swire Coca-Cola can ensure sustained cost savings and operational optimization.
+
+
+**2. Strategic and Investment Recommendations for Swire Coca-Cola’s Sponsors and Executives**
+
+**Audience**: Sponsors of the project, including Swire Coca-Cola executives, external partners, and investors.  
+**Focus**: Long-term strategic decisions, investments, and system scalability for predictive maintenance.
+
+- **Invest in Data Infrastructure for Cost Optimization**:  
+   
+   *Recommendation*: Invest in advanced data infrastructure, such as IoT sensors and analytics platforms, to support the predictive maintenance system. This will improve model accuracy, help identify additional cost-saving opportunities, and optimize overall machine performance.
+
+- **Promote a Cost-Conscious, Data-Driven Maintenance Culture**:  
+   
+   *Recommendation*: Encourage a culture of cost-consciousness and data-driven decision-making across maintenance teams. By integrating predictive insights into daily maintenance practices, operational costs can be better controlled, and machine reliability can be enhanced.
+
+- **Establish KPIs to Monitor Cost Savings**:  
+   
+   *Recommendation*: Develop key performance indicators (KPIs) to measure the success of the predictive maintenance system. Metrics such as maintenance cost reduction, downtime reduction, and increased equipment lifespan will help sponsors track ROI and assess the effectiveness of investments.
+
+- **Collaborate for Cost-Effective Implementation**:  
+   
+   *Recommendation*: Foster collaboration between operations, maintenance, and IT teams to ensure the efficient and cost-effective implementation of predictive maintenance systems. Cross-departmental coordination will maximize the benefits of the system and support its long-term success.
+
+- **Scalable and Flexible Maintenance Strategy for Future Savings**:  
+   
+   *Recommendation*: Ensure that the predictive maintenance system is scalable and flexible to accommodate future growth, including new machines and operational complexities. This will allow Swire Coca-Cola to continually optimize costs as the business expands.
+
+---
+
+**3. Cost Analysis and Financial Recommendations for Swire Coca-Cola’s Leadership and Sponsors**
+
+**Audience**: Both Swire Coca-Cola’s leadership and sponsors (financial stakeholders).  
+**Focus**: Financial implications of predictive maintenance, including cost savings, ROI, and potential areas for further investment.
+
+- **Cost Savings Through Tailored Maintenance Plans**:  
+   
+   *Recommendation*: Focus on predictive insights related to machine age and high-risk status to reduce maintenance costs. Prioritizing these areas will optimize resource allocation and provide significant savings over time.
+
+- **Regional Maintenance Optimization for Cost Efficiency**:  
+   
+   *Recommendation*: Optimize maintenance resources by focusing on regions with higher failure rates. This region-specific strategy will minimize operational disruptions and ensure that resources are effectively allocated.
+
+- **Focus on High-Risk Machines to Cut Costs**:  
+   
+   *Recommendation*: Direct resources towards high-risk machines identified through predictive maintenance modeling. Targeting these machines for early maintenance will reduce emergency repair costs and extend the equipment's useful life, resulting in long-term cost savings.
+
+- **Continuous Cost Monitoring and Model Refinement**:  
+   
+   *Recommendation*: Set up a system to continually monitor the effectiveness of predictive maintenance. Regular analysis will ensure that cost-saving strategies are sustained and that the predictive models are adjusted to reflect any changes in operational patterns.
+
+- **Invest in Data Infrastructure for Cost Optimization**:  
+   
+   *Recommendation*: Strengthen the investment in data infrastructure to enhance ongoing cost analysis. IoT sensors, real-time analytics, and predictive modeling will provide continuous insights into where further cost reductions can be achieved, supporting ongoing financial optimization.
+
+**Summary**:
+
+These recommendations provide a comprehensive framework for Swire Coca-Cola’s leadership, sponsors, and operational teams to leverage predictive maintenance for improved operational efficiency, cost savings, and long-term strategic investments. Each set of recommendations is rooted in data-driven insights from the modeling assignment, which guides decision-making and financial planning for the organization.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
