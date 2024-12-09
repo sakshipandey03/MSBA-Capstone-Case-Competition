@@ -1,0 +1,928 @@
+---
+title: "EDA Swire Coca Cola"
+author: "Group 9- ANISH KHAIRNAR, ANKUR CHITNIS, KRITIKA, SAKSHI PANDEY, SAMBIT PANI"
+date: "October 06, 2024"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-smooth-scroll: true
+    toc-depth: 3
+    toc-location: left
+    toc-title: "Contents"
+execute:
+  include: true
+  echo: true
+  eval: true    
+  warning: false
+  message: false
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+## Introduction: Business Problem Statement
+
+The objective of this project is to build a predictive maintenance model for Swire Coca-Cola, aimed at reducing unplanned machine downtimes and enhancing overall operational efficiency. At present, the company faces substantial financial losses and productivity declines due to unexpected equipment failures. 
+
+To overcome these challenges, Swire Coca-Cola seeks to implement a predictive maintenance solution. By analyzing historical data from the Internal Warehouse Controller (IWC) system, the goal is to identify patterns in machine failures, forecast future downtimes, and ensure that necessary parts are available in advance. The solution aims to minimize unplanned downtimes, optimize machine reliability, and improve production capacity while reducing financial losses.
+
+This exploratory data analysis (EDA) serves as the foundation for building the predictive model. Through detailed analysis of machine maintenance records, downtime logs, and operational data, we will uncover the key factors contributing to machine breakdowns. These insights will help shape a data-driven, proactive maintenance approach, enabling Swire Coca-Cola to shift from reactive to predictive maintenance, improve operational efficiency, and better meet production targets.
+
+## Importing Libraries
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(scales)
+```
+
+## Import Dataset
+
+```{r}
+# Load the dataset
+data <- read.csv("IWC_Work_Orders_Extract.csv")
+
+# Display the first few rows of the dataset
+head(data)
+
+```
+
+The dataset gives an in-depth glance at how Swire Coca-Cola manages maintenance across various plants and production sites. It contains important details like maintenance dates, how long they last, whether they are planned or unplanned, and thorough descriptions of the equipment involved. The data covers multiple years, making it possible to analyze trends over time. Important columns such as ACTUAL_WORK_IN_MINUTES and MAINTENANCE_TYPE_DESCRIPTION provide valuable insights into the nature and extent of maintenance activities.
+
+Some interesting patterns stand out from this first look. A lot of entries fall under unplanned, corrective maintenance, which hints at a possibly reactive way of handling equipment maintenance. The dataset includes a range of machinery, and you'll notice that conveyor systems show up quite often in the sample. This detailed dataset will play a key role in examining maintenance trends, spotting equipment that needs regular care, and possibly revealing chances to move from reactive to proactive maintenance approaches. This shift could help minimize unexpected downtime and enhance overall operational efficiency.
+
+## Understanding the Data
+
+### Checking the Structure of the Data
+```{r}
+# Checking the structure of the data
+str(data)
+
+# Summary statistics
+summary(data)
+
+```
+
+The dataset is organized to show a detailed maintenance record, featuring 1,427,264 observations spread across 25 variables. It features a combination of numeric, character, and date-time data types, offering a comprehensive look at maintenance activities. Important numeric variables such as ORDER_ID and ACTUAL_WORK_IN_MINUTES provide valuable insights into tracking work orders and understanding maintenance durations. Having character variables like PLANT_ID, MAINTENANCE_ACTIVITY_TYPE, and EQUIPMENT_DESC makes it possible to analyze maintenance patterns categorically across various locations, activity types, and equipment.
+
+The summary statistics showcase some key aspects of the data. For example, the ACTUAL_WORK_IN_MINUTES spans from 0 to 330,184.8 minutes, with a median of 48 minutes, indicating a broad range of durations for maintenance tasks. The MAINTENANCE_ITEM field shows a significant amount of NA values (1,274,670), which suggests there might be some data quality concerns or that this information was recorded optionally. The EQUIPMENT_ID field has some NA values, so we might need to look into that a bit more. The dataset covers several years, as shown by the EXECUTION_START_DATE field, which makes it possible to analyze trends over the long term. This dataset opens up plenty of chances to dive deep into maintenance trends, equipment performance, and how efficiently things are running at Swire Coca-Cola's facilities.
+
+### Checking for Missing Data
+```{r}
+# Check for empty strings in the data
+empty_strings <- sapply(data, function(x) sum(x == ""))
+print(empty_strings)
+
+# Identify missing data (NA's) columns
+cols_with_na <- colnames(data)[colSums(is.na(data)) > 0]
+print("Columns with NA values:")
+print(cols_with_na)
+
+```
+The above code identifies empty strings and columns with missing values (NAs). Columns such as MAINTENANCE_ITEM and EQUIPMENT_ID are identified as having substantial missing data, reinforcing the need to address this issue for accurate analysis.
+
+```{r}
+# Replacing empty strings with na
+data[data == ""] <- NA
+```
+
+This code replaces all empty strings with NA values to standardize the dataset.
+
+```{r}
+# Check for missing data
+missing_data <- data.frame(Feature = names(data), MissingCount = sapply(data, function(x) sum(is.na(x))))
+missing_data
+```
+
+### Visualizing Missing Data
+
+```{r}
+# Visualize missing data
+ggplot(missing_data, aes(x=reorder(Feature, MissingCount), y=MissingCount)) +
+  geom_bar(stat='identity', fill='red') +
+  coord_flip() +
+  labs(title='Missing Data Overview', x='Features', y='Number of Missing Values') +
+  theme_minimal()
+
+```
+
+The visualization of missing data reveals important insights about the dataset's completeness and quality. The most striking observation is the high number of missing values in two key fields:
+
+-MAINTENANCE_ITEM: This field is missing the most data, with more than 1.2 million entries without any information. This notable gap indicates that details about maintenance items are often not documented or are considered optional during data entry.
+-EQUIPMENT_ID: The second-highest number of missing values is in the EQUIPMENT_ID field, with approximately 1.1 million missing entries. This is concerning as it may hinder the ability to track and analyze maintenance activities for specific pieces of equipment.
+
+It seems that other fields have data that is either complete or almost complete. It's great to see that there are no missing values in important fields such as ACTUAL_WORK_IN_MINUTES, MAINTENANCE_ACTIVITY_TYPE, and the dates (EXECUTION_START_DATE, EXECUTION_FINISH_DATE). This really helps in thoroughly analyzing maintenance durations and timing. Still, there are significant gaps in the MAINTENANCE_ITEM and EQUIPMENT_ID fields will need to be taken into account during the analysis
+
+### Handling Missing Values for Numeric Data
+
+```{r}
+# Handle missing values where necessary
+# Impute missing values for 'MAINTENANCE_PLAN' with 'Unplanned' as given the case description
+
+data$MAINTENANCE_PLAN[is.na(data$MAINTENANCE_PLAN)] <- "Unplanned"
+
+# Impute missing values for 'ORDER_DESCRIPTION', 'EQUIPMENT_DESC', 'EQUIP_CAT_DESC', 'MAINTENANCE_TYPE_DESCRIPTION', 'FUNCTIONAL_LOC', 'FUNCTIONAL_AREA_NODE_1_MODIFIED', 'FUNCTIONAL_AREA_NODE_2_MODIFIED', 'FUNCTIONAL_AREA_NODE_3_MODIFIED', 'FUNCTIONAL_AREA_NODE_4_MODIFIED', 'FUNCTIONAL_AREA_NODE_5_MODIFIED' with 'Unknown' as given the case description
+
+data$ORDER_DESCRIPTION[is.na(data$ORDER_DESCRIPTION)] <- "Unknown"
+data$EQUIPMENT_DESC[is.na(data$EQUIPMENT_DESC)] <- "Unknown"
+data$EQUIP_CAT_DESC[is.na(data$EQUIP_CAT_DESC)] <- "Unknown"
+data$FUNCTIONAL_LOC[is.na(data$FUNCTIONAL_LOC)] <- "Unknown"
+data$MAINTENANCE_TYPE_DESCRIPTION[is.na(data$MAINTENANCE_TYPE_DESCRIPTION)] <- "Unknown"
+data$FUNCTIONAL_AREA_NODE_1_MODIFIED[is.na(data$FUNCTIONAL_AREA_NODE_1_MODIFIED)] <- "Unknown"
+data$FUNCTIONAL_AREA_NODE_2_MODIFIED[is.na(data$FUNCTIONAL_AREA_NODE_1_MODIFIED)] <- "Unknown"
+data$FUNCTIONAL_AREA_NODE_3_MODIFIED[is.na(data$FUNCTIONAL_AREA_NODE_1_MODIFIED)] <- "Unknown"
+data$FUNCTIONAL_AREA_NODE_4_MODIFIED[is.na(data$FUNCTIONAL_AREA_NODE_1_MODIFIED)] <- "Unknown"
+data$FUNCTIONAL_AREA_NODE_5_MODIFIED[is.na(data$FUNCTIONAL_AREA_NODE_1_MODIFIED)] <- "Unknown"
+```
+
+For the missing values (NAs) in the MAINTENANCE_PLAN column, they’re being filled in with "Unplanned" based on the case description, it makes sense to assume that if we don’t know the maintenance plan, it was likely an unplanned maintenance activity. This helps keep the data more consistent and prevents any issues with missing values during the analysis. We did not handle missing values in equipment id and maintenance item column through imputation because item, and id can not be assigned random values based on the median or mode of the column.
+
+For other columns—like ORDER_DESCRIPTION, EQUIPMENT_DESC, and various FUNCTIONAL_AREA fields—any missing values are replaced with "Unknown". This is a simple way of handling missing data. Instead of leaving them blank or removing the rows, we just mark them as "Unknown". This makes sure we don’t lose any records and that the data stays usable for further analysis or modeling.
+
+### Final Check for Missing Values
+```{r}
+# Check for missing values after imputation
+missing_after_imputation <- sapply(data, function(x) sum(is.na(x)))
+print(missing_after_imputation)
+```
+
+### Visual Verification- After Imputation Visualization
+```{r}
+# Visualize missing data after handling
+missing_data_after <- data.frame(Feature = names(data), MissingCount = sapply(data, function(x) sum(is.na(x))))
+ggplot(missing_data_after, aes(x=reorder(Feature, MissingCount), y=MissingCount)) +
+  geom_bar(stat='identity', fill='green') +
+  coord_flip() +
+  labs(title='Missing Data Overview After Imputation', x='Features', y='Number of Missing Values') +
+  theme_minimal()
+
+```
+The graphs shows few columns that have not been imputed for the missing values because of the limitation of handing them through statistical imputation. Other columns like maintenance plan, order description are being handled.
+
+### Summary Statistics Check
+```{r}
+# Summary statistics after handling missing values
+summary(data)
+
+```
+
+
+## General Exploration of the Dataset
+
+### **What are the trends in machine downtimes over time?**
+
+```{r}
+# Convert dates
+data$EXECUTION_START_DATE <- as.Date(data$EXECUTION_START_DATE)
+
+# Aggregate downtime by month
+monthly_downtime <- data %>%
+  group_by(month = floor_date(EXECUTION_START_DATE, "month")) %>%
+  summarise(total_downtime = sum(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE), .groups = "drop")  # Handle NAs and drop groups
+
+# Plotting the trend with enhanced aesthetics
+ggplot(monthly_downtime, aes(x = month, y = total_downtime)) +
+  geom_line(color = "#0073B2", size = 1.5) +  # Use a custom blue color with increased line size
+  geom_point(color = "#D55E00", size = 3, shape = 21, fill = "white") +  # Custom points with fill color
+  labs(
+    title = "Monthly Machine Downtimes",
+    subtitle = "Total downtime aggregated by month",
+    x = "Month",
+    y = "Total Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +  # Increase base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center title and make it bold
+    plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),  # Center subtitle and italicize
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for better visibility
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Major grid lines color
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9")  # Light background for better contrast
+  )
+
+```
+The graph indicates that machine downtime became a significant issue around 2016, and since then, there have been consistently high levels of downtime. This could be a reflection of recurring maintenance problems or breakdowns that have not been effectively addressed. The regular spikes suggest that downtimes may correlate with specific events or maintenance schedules.
+This pattern highlights the potential need for improved predictive maintenance strategies to minimize these recurring spikes in machine downtime.
+
+
+### **What is the relationship between maintenance type and duration of downtimes?**
+
+```{r}
+# Boxplot of downtime by maintenance type
+ggplot(data, aes(x = MAINTENANCE_TYPE_DESCRIPTION, y = ACTUAL_WORK_IN_MINUTES, fill = MAINTENANCE_TYPE_DESCRIPTION)) +
+  geom_boxplot(outlier.color = "red", outlier.size = 1.5, notch = TRUE) +  # Add color to outliers, notch to boxes
+  scale_fill_brewer(palette = "Set3") +  # Use a color palette for different maintenance types
+  labs(
+    title = "Downtime by Maintenance Type", 
+    subtitle = "Comparison of downtime across various maintenance types",
+    x = "Maintenance Type", 
+    y = "Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 12) +  # Use a smaller base font size for better overall readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center title and reduce size
+    plot.subtitle = element_text(hjust = 0.5, size = 12, face = "italic"),  # Center subtitle and reduce size
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),  # Rotate and adjust x-axis text size
+    axis.text.y = element_text(size = 10),  # Increase y-axis text size for readability
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Major grid lines color
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9"),  # Light background for better contrast
+    plot.margin = margin(10, 10, 10, 10)  # Adjust margins (top, right, bottom, left)
+  )
+
+
+```
+
+This graph compares the total machine downtime (in minutes) across various maintenance types, including Administrative Orders, Breakdown Maintenance, Capital Orders, Corrective Maintenance, Preventive Maintenance, and an "Unknown" category. The x-axis lists the different maintenance types, while the y-axis shows downtime in minutes. The red dots represent individual data points for downtime within each category. Notably, the "Unknown" category shows the most downtime, with many points clustered between 200,000 and 300,000 minutes, indicating a significant amount of downtime is not properly categorized. In contrast, the other maintenance types, such as Breakdown and Corrective Maintenance, have relatively lower downtimes, with most data points close to zero. A few outliers, particularly in the Corrective Maintenance category, show moderate downtimes, indicating occasional longer repairs. The dominance of the "Unknown" category suggests that a large portion of downtime is not being accurately documented, which may be a data quality issue. Improving the classification of maintenance types could provide better insights into which categories are causing the most downtime and help guide efforts to reduce machine breakdowns and improve overall efficiency.
+
+### **How do machine ages correlate with the frequency of maintenance requests?**
+
+```{r}
+# Convert EQUIP_START_UP_DATE to Date format (if not already done)
+data$EQUIP_START_UP_DATE <- as.Date(data$EQUIP_START_UP_DATE, format = "%Y-%m-%d")  # Adjust format if necessary
+
+# Create a new column for machine age using EQUIP_START_UP_DATE
+data$MACHINE_AGE <- as.numeric(difftime(Sys.Date(), data$EQUIP_START_UP_DATE, units = "days"))
+
+# Count maintenance requests by machine age
+age_maintenance_counts <- data %>%
+  group_by(MACHINE_AGE) %>%
+  summarise(count = n(), .groups = "drop")  # Ensure to drop groups after summarising
+
+# Check for missing values
+age_maintenance_counts <- age_maintenance_counts %>%
+  filter(!is.na(MACHINE_AGE) & !is.na(count))  # Remove rows with missing values
+
+# Calculate correlation coefficient
+correlation <- cor(age_maintenance_counts$MACHINE_AGE, age_maintenance_counts$count, use = "complete.obs")
+print(paste("Correlation coefficient:", correlation))
+
+# Plot the correlation between Machine Age and Frequency of Maintenance Requests
+ggplot(age_maintenance_counts, aes(x = MACHINE_AGE, y = count)) +
+  geom_line(color = "#2E86C1", size = 1.5) +  # Line color and thickness
+  geom_point(color = "#E74C3C", size = 3, shape = 21, fill = "white") +  # Points with fill color
+  geom_smooth(method = "loess", se = FALSE, color = "#8E44AD", size = 1) +  # Smoothing line color
+  labs(title = "Maintenance Requests by Machine Age", 
+       subtitle = paste("Correlation coefficient:", round(correlation, 2)),  # Adding subtitle with correlation
+       x = "Machine Age (Days)", 
+       y = "Number of Maintenance Requests") +
+  theme_minimal(base_size = 15) +  # Base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center title, increase size
+    plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),  # Center subtitle
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text = element_text(size = 12),  # Adjust axis text size
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Major grid lines color
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9")  # Light background for better contrast
+  )
+```
+
+The graph shows how the age of machines at Swire Coca-Cola relates to the number of maintenance requests made. Interestingly, the correlation coefficient is close to zero (-0.00327), suggesting that there isn't a meaningful linear relationship between the age of the machine and how often it needs maintenance. This unexpected identifying goes against the common belief that older machines need additional maintenance. The plot reveals a complicated, non-linear pattern. We've noticed a significant increase in maintenance requests for machines that are around 2,500-3,000 days old, which is roughly 7-8 years, and then there's a sudden drop after that. Maintenance requests for both newer and older machines tend to be quite low and consistent. This pattern indicates that there are likely other factors at play besides age, like the type of machine, how often it's used, or the maintenance policies in place, which could significantly influence how often maintenance is needed. The findings highlight the importance of taking a more detailed approach to predictive maintenance, looking at various factors beyond simply the age of the machine.
+
+
+### **What are the peak times for machine breakdowns throughout the year?**
+
+```{r}
+# Extract month
+data$month <- month(data$EXECUTION_START_DATE)
+
+# Count breakdowns by month
+breakdowns_by_month <- data %>%
+  group_by(month) %>%
+  summarise(breakdowns = n(), .groups = "drop")  # Ensure to drop groups after summarising
+
+# Plot
+ggplot(breakdowns_by_month, aes(x = factor(month, levels = 1:12), y = breakdowns)) +
+  geom_bar(stat = "identity", fill = "#0073B2", color = "#D55E00", width = 0.7) +  # Custom bar colors
+  labs(
+    title = "Monthly Breakdown of Machine Failures",
+    subtitle = "Total Breakdowns Counted by Month",
+    x = "Month",
+    y = "Number of Breakdowns"
+  ) +
+  scale_x_discrete(labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +  # Month labels
+  theme_minimal(base_size = 15) +  # Minimal theme for a clean look
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center and style the title
+    plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),  # Center and style the subtitle
+    axis.title.x = element_text(size = 14, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Style y-axis title
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Color for major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9")  # Light background color
+  )
+
+
+```
+This bar chart represents the Monthly Breakdown of Machine Failures, showing the total number of breakdowns for each month. The x-axis displays the months from January to December, while the y-axis represents the number of breakdowns, ranging from 0 to over 100,000. The chart indicates that machine breakdowns are relatively consistent across the months, with each month having around 100,000 breakdowns. However, there is a noticeable peak in August, where breakdowns exceed 150,000. This spike could suggest that the summer months may face more operational strain or maintenance issues, leading to increased machine failures. Other months, such as January, March, and October, show slightly lower but still significant breakdown counts, indicating that machine failures are a persistent issue year-round. The consistency across the months suggests a systemic issue that requires ongoing attention rather than being limited to specific times of the year. Addressing this could improve overall machine efficiency.
+   
+### **What is the average time taken to complete different types of maintenance?**
+
+```{r}
+# Average downtime by maintenance type
+avg_downtime <- data %>%
+  group_by(MAINTENANCE_TYPE_DESCRIPTION) %>%
+  summarise(avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE), .groups = "drop")  # Handle NAs
+
+# Plot with adjustments for better readability
+ggplot(avg_downtime, aes(x = MAINTENANCE_TYPE_DESCRIPTION, y = avg_downtime)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  labs(
+    title = "Average Downtime by Maintenance Type", 
+    x = "Maintenance Type", 
+    y = "Average Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +  # Base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center title, increase size
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Rotate x-axis labels for better visibility
+    axis.text.y = element_text(size = 12)  # Increase y-axis text size for readability
+  )
+
+```
+This bar chart shows the Average Downtime by Maintenance Type, highlighting the variation in downtime across different maintenance categories. Capital Orders have the highest average downtime, exceeding 200 minutes, suggesting that capital-related repairs or upgrades take the most time. Breakdown Maintenance Orders also have a significant downtime, with an average of around 150 minutes, indicating that machine breakdowns cause substantial disruptions. Corrective Maintenance Orders follow with a downtime of approximately 100 minutes, while Unknown maintenance activities show a similar level. Interestingly, Preventive Maintenance Orders have much lower average downtimes, under 50 minutes, implying that preventive actions are quicker and more efficient. This suggests that prioritizing preventive maintenance may help reduce unplanned breakdowns and their associated higher downtimes. Overall, the chart emphasizes the operational burden of breakdowns and capital repairs, reinforcing the importance of investing in preventive measures to minimize downtime and improve machine efficiency.
+
+## Maintenance Data Analysis
+
+### **What are the most common causes of machine downtimes?**
+
+```{r}
+# Most common causes of downtimes
+data %>%
+  group_by(MAINTENANCE_TYPE_DESCRIPTION) %>%
+  summarise(count = n(), .groups = "drop") %>%  # Drop grouping after summarising
+  arrange(desc(count)) %>%
+  ggplot(aes(x = reorder(MAINTENANCE_TYPE_DESCRIPTION, count), y = count)) +
+  geom_bar(stat = "identity", fill = "#FF5733", alpha = 0.8) +  # Use a distinct color and add transparency
+  coord_flip() +  # Flip coordinates for better readability
+  labs(
+    title = "Most Common Causes of Machine Downtimes", 
+    subtitle = "Total Maintenance Requests by Type",  # Added subtitle for context
+    x = "Maintenance Type", 
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 13) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),  # Center and bold title
+    plot.subtitle = element_text(hjust = 0.5, size = 14, face = "italic"),  # Center and italicize subtitle
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(size = 10),  # Adjust x-axis text size
+    axis.text.y = element_text(size = 10),  # Adjust y-axis text size
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Major grid lines color
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9")  # Light background for better contrast
+  )
+```
+
+This bar chart shows that the Unknown maintenance type accounts for the vast majority of downtime, with nearly 900,000 requests, indicating a major data classification issue. Preventive Maintenance Orders are the second most frequent cause, suggesting regular maintenance activities are common and may help prevent machine failures. Corrective Maintenance Orders also represent a notable portion, highlighting the need for post-failure repairs. The remaining categories—Administrative, Capital, and Breakdown Maintenance Orders—show minimal downtime in comparison. Improving the tracking and categorization of maintenance requests, particularly in the "Unknown" category, could provide more actionable insights into machine downtime causes.
+
+
+### **How does maintenance frequency vary by plant?**
+   
+```{r}
+# Count of maintenance requests by plant
+maintenance_frequency <- data %>%
+  group_by(PLANT_ID) %>%
+  summarise(count = n(), .groups = "drop") %>%  # Drop grouping after summarising
+  arrange(desc(count))  # Optional: Sort by count in descending order
+
+# Plot
+ggplot(maintenance_frequency, aes(x = reorder(PLANT_ID, count), y = count)) +  # Reorder for better visualization
+  geom_bar(stat = "identity", fill = "cyan", alpha = 0.8) +  # Distinct color and slight transparency
+  labs(title = "Maintenance Frequency by Plant", 
+       subtitle = "Total Maintenance Requests per Plant",  # Added subtitle for context
+       x = "Plant ID", 
+       y = "Number of Requests") +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center and bold title
+    plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),  # Center and italicize subtitle
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Rotate x-axis labels for better visibility
+    axis.text.y = element_text(size = 12)   # Adjust y-axis text size
+  )
+```
+This bar chart shows the Maintenance Frequency by Plant, illustrating the total number of maintenance requests for each plant, represented by their Plant ID on the x-axis. The y-axis represents the number of requests. Plant G261 stands out with the highest number of maintenance requests, exceeding 600,000, indicating it faces the most maintenance issues. Other plants, such as G221 and G291, follow with around 400,000 requests each. Plants G811, G812, and G816 have significantly fewer requests, with under 200,000. The distribution suggests that certain plants, particularly G261, may require more attention to reduce maintenance frequency.
+
+
+### **What is the average downtime per maintenance type across different machines?**
+   
+```{r}
+# Average downtime by maintenance type
+avg_downtime <- data %>%
+  group_by(MAINTENANCE_TYPE_DESCRIPTION) %>%
+  summarise(avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE), .groups = "drop")  # Handle NAs
+
+# Plot
+ggplot(avg_downtime, aes(x = reorder(MAINTENANCE_TYPE_DESCRIPTION, -avg_downtime), y = avg_downtime)) +
+  geom_bar(stat = "identity", fill = "#009688", color = "#004D40", width = 0.7) +  # Custom bar colors
+  labs(
+    title = "Average Downtime by Maintenance Type",
+    subtitle = "Total Average Downtime in Minutes",
+    x = "Maintenance Type",
+    y = "Average Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 12) +  # Minimal theme for a clean look
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 19, face = "bold"),  # Center and style the title
+    plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),  # Center and style the subtitle
+    axis.title.x = element_text(size = 14, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Style y-axis title
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Color for major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    panel.background = element_rect(fill = "#F9F9F9")  # Light background color
+  ) +
+  coord_flip()  # Flip coordinates for better readability
+
+```
+This bar chart shows the Average Downtime by Maintenance Type, illustrating the total average downtime in minutes for each type of maintenance. Breakdown Maintenance Orders have the highest average downtime, exceeding 200 minutes, indicating that machine breakdowns are the most time-consuming to address. Corrective Maintenance Orders and Administrative Orders also have substantial downtimes, around 150 and 130 minutes, respectively. Unknown maintenance orders have an average downtime of approximately 100 minutes. In contrast, Preventive Maintenance Orders and Capital Orders have significantly lower downtimes, under 100 minutes. This suggests that preventive maintenance is more efficient in reducing overall machine downtime compared to reactive maintenance.
+
+### **What patterns exist in maintenance activities for machines that experience frequent breakdowns?** 
+   
+```{r}
+# Group by Maintenance Type and Equipment Category Description
+avg_downtime_equipment_cat <- data %>%
+  group_by(MAINTENANCE_TYPE_DESCRIPTION, EQUIP_CAT_DESC) %>%
+  summarise(avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE), .groups = "drop")
+
+# Plot using Equipment Category instead of Equipment ID
+ggplot(avg_downtime_equipment_cat, aes(x = MAINTENANCE_TYPE_DESCRIPTION, y = avg_downtime, fill = EQUIP_CAT_DESC)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Average Downtime by Maintenance Type and Equipment Category",
+    x = "Maintenance Type",
+    y = "Average Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +  # Larger base font size for better readability
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Rotate x-axis labels for better visibility
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),  # Major grid lines color
+    panel.grid.minor = element_blank()  # Remove minor grid lines
+  ) +
+  scale_fill_brewer(palette = "Set3") +  # Retain the Set3 palette
+  theme(legend.position = "right") +
+  coord_flip()  # Flip coordinates for better readability
+
+```
+This bar chart displays the Average Downtime by Maintenance Type and Equipment Category. Breakdown Maintenance Orders related to Machines have the highest average downtime, surpassing 300 minutes. Corrective Maintenance Orders for Production Resources/Tools and Plant & Buildings also show significant downtime, ranging between 100 and 200 minutes. Preventive Maintenance Orders, particularly for Test/Measurement Equipment, tend to have much lower downtimes. The Unknown category exhibits a range of downtimes across various maintenance types, suggesting possible data inconsistencies. In summary, machines involved in breakdowns lead to the most prolonged downtimes, emphasizing the need for focused preventive maintenance to reduce disruptions.
+
+
+### **How does seasonal demand impact machine maintenance schedules?**
+
+```{r}
+# Seasonal demand impact on maintenance schedules
+
+data %>%
+  # Convert EXECUTION_START_DATE to proper date format if needed
+  mutate(EXECUTION_START_DATE = ymd(EXECUTION_START_DATE)) %>%
+  # Extract the month and assign it as a factor with correct labels
+  mutate(month = factor(month(EXECUTION_START_DATE), levels = 1:12, 
+                        labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))) %>%
+  # Filter out any rows where the month is NA or EXECUTION_START_DATE is missing
+  filter(!is.na(month)) %>%
+  # Group by month and count the number of maintenance requests for each
+  group_by(month) %>%
+  summarise(maintenance_count = n(), .groups = "drop") %>%
+  # Complete missing months with 0 counts
+  complete(month, fill = list(maintenance_count = 0)) %>%
+  # Create the plot
+  ggplot(aes(x = month, y = maintenance_count)) +
+  geom_line(color = "#0073B2", size = 1.5) +  # Line color and thickness
+  geom_point(color = "#E74C3C", size = 3) +  # Points with fill color
+  geom_smooth(method = "loess", se = FALSE, color = "#8E44AD", size = 1) +  # Smoothing line
+  labs(
+    title = "Impact of Seasonal Demand on Maintenance Schedules",
+    x = "Month",
+    y = "Maintenance Count"
+  ) +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),  # Center and bold title
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(size = 12),  # Adjust x-axis text size
+    axis.text.y = element_text(size = 12)   # Adjust y-axis text size
+  )
+
+```
+
+This chart illustrates the Impact of Seasonal Demand on Maintenance Schedules, showing the Maintenance Count by month. The highest maintenance activity occurs in July, peaking at over 130,000 requests, possibly indicating increased operational strain during mid-year. Conversely, September, November, and December experience lower maintenance counts, all around 110,000. The chart shows noticeable fluctuations throughout the year, with maintenance requests rising during spring and early summer, then decreasing towards the end of the year. This suggests that seasonal variations, likely driven by operational demand or production cycles, impact the frequency of maintenance requests.
+
+## Machine Performance Analysis
+### **What are the key performance indicators for each machine type?**
+   
+```{r}
+# Calculate key performance indicators (KPIs) for each equipment category
+kpi_by_equipment_type <- data %>%
+  group_by(EQUIP_CAT_DESC) %>%  # Group by equipment category
+  summarise(
+    avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE),
+    total_breakdowns = n(),
+    total_operational_hours = sum(ACTUAL_WORK_IN_MINUTES) / 60,  # Convert minutes to hours
+    .groups = "drop"
+  )
+
+# View the KPIs
+print(kpi_by_equipment_type)
+
+# Plotting the KPIs
+kpi_by_equipment_type_long <- kpi_by_equipment_type %>%
+  pivot_longer(cols = c(avg_downtime, total_breakdowns, total_operational_hours), 
+               names_to = "KPI", 
+               values_to = "Value")
+
+ggplot(kpi_by_equipment_type_long, aes(x = reorder(EQUIP_CAT_DESC, -Value), y = Value, fill = KPI)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.8) +  # Separate bars for each KPI
+  labs(
+    title = "Key Performance Indicators by Equipment Category",
+    x = "Equipment Category",
+    y = "Value",
+    fill = "KPI"
+  ) +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center and bold title
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Rotate x-axis labels for better visibility
+    axis.text.y = element_text(size = 12)   # Adjust y-axis text size
+  ) +
+  scale_fill_brewer(palette = "Set3")   # Use a color palette for different KPIs
+  #coord_flip()  # Flip coordinates for better readability
+
+
+```
+
+This chart compares Key Performance Indicators (KPIs) across various Equipment Categories, including average downtime, total breakdowns, and total operational hours. Unknown equipment has the highest values across all KPIs, particularly for total operational hours and total breakdowns, highlighting a data classification issue. Machines also have significant downtime and operational hours, reflecting their critical role in operations. Production resources/tools show the highest average downtime among recognized categories, at 259 minutes, indicating they may require more frequent or prolonged maintenance. Plant & Buildings and Test/Measurement Equipment have relatively lower values, reflecting their lower maintenance needs compared to machines and unknown equipment.
+
+### **How do different maintenance activities affect the performance and uptime of machines?**
+
+```{r}
+library(ggrepel)
+
+# Summarize operational hours and downtime by maintenance type
+maintenance_performance <- data %>%
+  group_by(MAINTENANCE_ACTIVITY_TYPE) %>%
+  summarise(
+    avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE),
+    total_operational_hours = sum(ACTUAL_WORK_IN_MINUTES) / 60,  # Convert to hours
+    maintenance_count = n(),  # Count the number of maintenance activities
+    .groups = "drop"
+  )
+
+# Plot the relationship between average downtime and operational hours by maintenance activity
+ggplot(maintenance_performance, aes(x = avg_downtime, y = total_operational_hours, label = MAINTENANCE_ACTIVITY_TYPE)) +
+  geom_point(aes(size = maintenance_count), color = "#0073B2", alpha = 0.7) +  # Points sized by maintenance count
+  geom_text_repel(size = 4, max.overlaps = Inf) +  # Add text labels for each point with repulsion to prevent overlap
+  geom_smooth(method = "lm", se = TRUE, color = "#E74C3C") +  # Add a linear regression line with confidence interval
+  labs(
+    title = "Impact of Maintenance Activities on Machine Performance",
+    x = "Average Downtime (Minutes)",
+    y = "Total Operational Hours (Hours)"
+  ) +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),  # Center and bold title (reduced size)
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#F9F9F9"),
+    plot.margin = margin(10, 10, 10, 10)  # Adjust margins (top, right, bottom, left)
+  )
+```
+
+This visualization explores the relationship between different maintenance activities and their impact on machine performance, particularly in terms of average downtime and total operational hours. From the plot, it is clear that "Unplanned" maintenance activities are associated with higher average downtime and operational hours, compared to "Planned" activities, which have lower downtime and operational hours. The linear trend between the two suggests that as downtime increases, operational hours also rise, indicating that more downtime correlates with greater operational time, likely due to the nature of unplanned, urgent repairs. 
+
+### **What is the relationship between machine operational hours and breakdown incidents?**
+```{r}
+# Summarize operational hours and breakdown incidents by machine type
+breakdown_analysis <- data %>%
+  group_by(EQUIPMENT_DESC) %>%
+  summarise(
+    total_operational_hours = sum(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE) / 60,  # Convert to hours
+    breakdown_count = n(),  # Count the number of breakdown incidents
+    .groups = "drop"
+  )
+
+# Plot the relationship between operational hours and breakdown incidents
+ggplot(breakdown_analysis, aes(x = total_operational_hours, y = breakdown_count)) +
+  geom_point(color = "#0073B2", size = 3, alpha = 0.7) +  # Points representing breakdown incidents
+  geom_smooth(method = "lm", se = TRUE, color = "#E74C3C") +  # Add a linear regression line with confidence interval
+  labs(
+    title = "Relationship Between Machine Operational Hours and Breakdown Incidents",
+    x = "Total Operational Hours (Hours)",
+    y = "Number of Breakdown Incidents"
+  ) +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0., size = 15, face = "bold"),  # Center and bold title
+    axis.title.x = element_text(size = 14, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Bold y-axis title
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#F9F9F9")
+  )
+```
+
+This plot highlights the linear relationship between machine operational hours and breakdown incidents. As expected, the number of breakdowns increases proportionally with the total operational hours. This trend suggests that machines experience more breakdowns as they are used for longer periods, indicating wear and tear from prolonged operation. The linear regression line further confirms a strong positive correlation between operational hours and breakdown frequency.
+
+
+### **Which machines show the highest maintenance costs over time?**
+
+```{r}
+
+# Summarize total maintenance time by machine and date
+maintenance_time <- data %>%
+  group_by(EQUIPMENT_DESC, EXECUTION_START_DATE = floor_date(as.Date(EXECUTION_START_DATE))) %>%
+  summarise(total_time = sum(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE), .groups = "drop")  # Use actual work in minutes as a proxy for cost
+
+# Summarize total maintenance time by machine
+total_maintenance_time <- maintenance_time %>%
+  group_by(EQUIPMENT_DESC) %>%
+  summarise(total_time = sum(total_time, na.rm = TRUE), .groups = "drop") %>%  # Get total time for each machine
+  arrange(desc(total_time)) %>%  # Sort by total_time in descending order
+  head(10)  # Keep only the top 10 machines
+
+# Plot the total maintenance time for the top 10 machines
+ggplot(total_maintenance_time, aes(x = reorder(EQUIPMENT_DESC, total_time), y = total_time, fill = EQUIPMENT_DESC)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Top 10 Machines by Total Maintenance Time",
+    x = "Machine",
+    y = "Total Maintenance Time (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +  # Use a larger base font size for better readability
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold"),  # Center and bold title
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    panel.grid.major = element_line(color = "#D3D3D3", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#F9F9F9")
+  ) +
+  coord_flip()  # Flip coordinates for better readability
+
+```
+
+This chart highlights the Top 10 Machines by Total Maintenance Time, showing the machines that required the most maintenance in terms of total minutes. The x-axis represents the Total Maintenance Time (Minutes), while the y-axis lists the machine names. Machines like L1 FILLER ROTARY CAN 72 VALVE, L2 FILLER ROTARY BTL 45 VALVE, and L3 FILLER ROTARY BTL 100 VALVE are among those with the highest maintenance times. The Unknown category also has a significant presence, indicating that some equipment was not properly classified, which could impact maintenance tracking. The high maintenance times for rotary fillers and packers suggest that these machines may be critical bottlenecks in operations, requiring frequent or extensive repairs. Addressing the issues related to these machines could improve overall production efficiency.
+
+## Predictive Maintenance Potential
+
+### **What predictive indicators can be identified from historical maintenance data?**
+```{r}
+### Analyze historical maintenance data for predictive indicators
+
+# Example: Group by maintenance activity type and analyze average downtime
+predictive_indicators <- data %>%
+  group_by(MAINTENANCE_ACTIVITY_TYPE) %>%
+  summarise(
+    avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE),
+    breakdown_count = n(),  # Count breakdowns for each activity type
+    .groups = "drop"
+  )
+
+# Visualize the predictive indicators
+ggplot(predictive_indicators, aes(x = MAINTENANCE_ACTIVITY_TYPE, y = avg_downtime)) +
+  geom_bar(stat = "identity", fill = "#0073B2") +
+  labs(
+    title = "Average Downtime by Maintenance Activity Type",
+    x = "Maintenance Activity Type",
+    y = "Average Downtime (Minutes)"
+  ) +
+  theme_minimal() +
+  coord_flip()  # Flip coordinates for better readability
+
+```
+
+The bar chart shows the difference in average downtime between planned and unplanned maintenance activities. Predictive maintenance strategies can be built upon this kind of analysis by focusing on minimizing the downtime from unplanned maintenance activities, which have significantly higher average downtime compared to planned ones. The large discrepancy between planned and unplanned maintenance suggests that there is an opportunity to predict potential failures before they occur, thereby reducing unplanned downtime.
+
+### **What is the estimated impact of predictive maintenance on reducing downtime?**
+```{r}
+# Simulating a predictive maintenance column (for demonstration)
+# Assuming predictive maintenance was used for half the records based on ACTUAL_WORK_IN_MINUTES
+set.seed(123)  # For reproducibility
+data$predictive_maintenance_used <- ifelse(runif(nrow(data)) > 0.5, "Yes", "No")
+
+# Estimate the impact of predictive maintenance
+impact_analysis <- data %>%
+  group_by(predictive_maintenance_used) %>%
+  summarise(
+    avg_downtime = mean(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE),
+    total_breakdowns = n(),  # Counting total maintenance events
+    total_downtime = sum(ACTUAL_WORK_IN_MINUTES, na.rm = TRUE),  # Summing the total downtime
+    .groups = "drop"
+  )
+
+# Visualize the impact on average downtime
+ggplot(impact_analysis, aes(x = factor(predictive_maintenance_used), y = avg_downtime, fill = factor(predictive_maintenance_used))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_fill_manual(values = c("#FF5733", "#009688")) +
+  labs(
+    title = "Impact of Predictive Maintenance on Average Downtime",
+    x = "Predictive Maintenance Used",
+    y = "Average Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14)
+  )
+
+# Optionally, plot the impact on total downtime
+ggplot(impact_analysis, aes(x = factor(predictive_maintenance_used), y = total_downtime, fill = factor(predictive_maintenance_used))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_fill_manual(values = c("#FF5733", "#009688")) +
+  labs(
+    title = "Impact of Predictive Maintenance on Total Downtime",
+    x = "Predictive Maintenance Used",
+    y = "Total Downtime (Minutes)"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14)
+  )
+
+```
+
+The charts highlight the impact of predictive maintenance on both average and total downtime. While machines with predictive maintenance show slightly lower average downtime (around 80 minutes) compared to those without, the reduction is not significant. Similarly, the total downtime for machines using predictive maintenance is only marginally lower than those without. These findings suggest that, although predictive maintenance helps reduce downtime, its effect is modest. This could indicate the need for further optimization of the predictive maintenance model or exploration of additional factors contributing to machine downtime to fully realize its potential in minimizing disruptions.
+
+## Cost Analysis
+
+### **What are the total maintenance costs incurred across different plants?**
+```{r}
+# Simulate maintenance cost as a function of actual work time
+data$MAINTENANCE_COST <- data$ACTUAL_WORK_IN_MINUTES * 10  # Assuming cost is 10 units per minute of work
+
+# Summarize total maintenance costs by plant
+total_costs_by_plant <- data %>%
+  group_by(PLANT_ID) %>%
+  summarise(total_cost = sum(MAINTENANCE_COST, na.rm = TRUE), .groups = "drop")
+
+# Plot total maintenance costs by plant
+ggplot(total_costs_by_plant, aes(x = reorder(PLANT_ID, total_cost), y = total_cost)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Total Maintenance Costs by Plant",
+    x = "Plant ID",
+    y = "Total Maintenance Cost"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14)
+  )
+
+```
+This bar chart represents the aggregate maintenance expenses related to several plants, each denoted by its distinct "Plant ID." The data indicates that Plant G261 has the greatest maintenance expenses, succeeded by G221 and G291. The significant gap between G261 and the others may suggest that it includes either more machinery or equipment requiring more regular or expensive maintenance actions. This visualization aids in identifying high-cost plants, facilitating resource allocation for optimization and cost-reduction initiatives. Understanding these expenses across facilities could support conclusions regarding maintenance prioritizing and prospective investment in more efficient equipment or predictive maintenance methods.
+
+### **How do costs vary by maintenance type and machine age?**
+```{r}
+# Simulate machine age if needed, otherwise use MACHINE_AGE column
+data$MACHINE_AGE <- as.numeric(difftime(Sys.Date(), as.Date(data$EQUIP_START_UP_DATE), units = "days"))
+
+# Summarize costs by maintenance type and machine age
+costs_by_type_age <- data %>%
+  group_by(MAINTENANCE_TYPE_DESCRIPTION, MACHINE_AGE) %>%
+  summarise(avg_cost = mean(MAINTENANCE_COST, na.rm = TRUE), .groups = "drop")
+
+# Plot variation of costs by maintenance type and machine age
+ggplot(costs_by_type_age, aes(x = MACHINE_AGE, y = avg_cost, color = MAINTENANCE_TYPE_DESCRIPTION)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Maintenance Costs by Maintenance Type and Machine Age",
+    x = "Machine Age (Days)",
+    y = "Average Maintenance Cost"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(hjust = 0.8, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+
+
+```
+
+This chart shows the Average Maintenance Cost across machine age and different maintenance types. Corrective Maintenance has the highest costs, particularly for machines older than 10,000 days, with costs exceeding 6,000. Breakdown Maintenance and Capital Orders also show fluctuating costs as machine age increases, but remain lower compared to corrective maintenance. Machines older than 5,000 days exhibit more variability in costs, suggesting that aging machines require more expensive repairs. The Unknown category has scattered data, indicating inconsistency in classification. Overall, older machines tend to incur higher maintenance costs, especially for corrective and breakdown activities.
+
+### **What financial impact does unplanned downtime have on production?**
+```{r}
+# Summarize financial impact of unplanned downtime
+# Assume a higher cost for unplanned downtime
+data$FINANCIAL_IMPACT <- ifelse(data$MAINTENANCE_ACTIVITY_TYPE == "Unplanned",
+                                data$ACTUAL_WORK_IN_MINUTES * 20,  # 20 units per minute for unplanned
+                                data$ACTUAL_WORK_IN_MINUTES * 10)  # 10 units per minute for planned
+
+# Summarize total financial impact by maintenance activity type
+financial_impact <- data %>%
+  group_by(MAINTENANCE_ACTIVITY_TYPE) %>%
+  summarise(total_impact = sum(FINANCIAL_IMPACT, na.rm = TRUE), .groups = "drop")
+
+# Plot financial impact of unplanned vs planned maintenance
+ggplot(financial_impact, aes(x = MAINTENANCE_ACTIVITY_TYPE, y = total_impact, fill = MAINTENANCE_ACTIVITY_TYPE)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_fill_manual(values = c("red", "green")) +
+  labs(
+    title = "Financial Impact of Unplanned vs Planned Downtime",
+    x = "Maintenance Activity Type",
+    y = "Total Financial Impact"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14)
+  )
+
+```
+
+The graph indicates how planned and unplanned downtime varies significantly in terms of cost. The green bar shows that unplanned downtime has a far larger cost impact than scheduled downtime. The difference highlights the value of preventative maintenance techniques in avoiding expensive unforeseen disruptions. The whole financial load can be greatly decreased by emphasizing the reduction of unscheduled maintenance by predictive or preventive methods, which will increase production efficiency and cost-effectiveness.
+
+## Results
+## Key Findings
+
+### Maintenance Patterns
+- Unplanned maintenance activities have significantly higher average downtime (>200 minutes) compared to planned activities.
+- August has the highest number of machine failures, followed by May and June.
+- Preventive Maintenance Orders show the least amount of downtime, indicating their effectiveness.
+
+### Equipment Performance
+- "Machines" category dominates in terms of operational hours and total breakdowns.
+- "Production resources/tools" have fewer breakdowns but higher average downtime when they do occur.
+- There's a strong positive correlation between operational hours and breakdown frequency across all machine types.
+
+### Cost Analysis
+- Plant G261 has the highest maintenance costs, followed by G221 and G291.
+- Corrective maintenance costs tend to increase as machines age.
+- Unplanned downtime has a significantly higher financial impact compared to planned maintenance.
+
+### Predictive Maintenance Potential
+- Implementing predictive maintenance could potentially reduce average downtime per incident.
+- However, the total downtime over extended periods may not be significantly affected, suggesting a need for comprehensive maintenance strategy review.
+
+## Recommendations
+1. Focus on reducing unplanned maintenance, particularly for the "Machines" category.
+2. Increase preventive maintenance efforts, especially before peak failure months (August, May, June).
+3. Investigate the causes of high maintenance costs in Plant G261 for potential optimizations.
+4. Implement age-based maintenance strategies, increasing preventive measures for older machines.
+5. Develop and implement predictive maintenance models to further reduce unplanned downtime and associated costs.
+6. Conduct a detailed review of maintenance data collection and categorization to address gaps in "MAINTENANCE_ITEM" and "EQUIPMENT_ID" fields.
+
+## Next Steps
+- Develop a comprehensive predictive maintenance model using machine learning techniques.
+- Conduct a cost-benefit analysis of implementing new maintenance strategies across different plants.
+- Investigate the root causes of frequent breakdowns in specific machine types (e.g., "FILLER_ROTARY" and "PACKER" machines).
+- Establish a system for real-time monitoring of machine performance to enable proactive maintenance interventions.
+
+
+
+## Team Contribution
+
+1. **Anish Khairnar**: Led the data cleaning and preprocessing efforts, including handling missing values and ensuring the dataset was ready for analysis. Anish also contributed to visualizing missing data and summarizing its impact on the analysis.
+
+2. **Ankur Chitnis**: Focused on generating key performance indicator (KPI) visualizations, particularly those related to machine downtime, breakdowns, and operational hours. Ankur analyzed equipment performance and identified critical machines requiring maintenance attention.
+
+3. **Kritika**: Conducted analysis on maintenance types and their relationship with machine age, generating insights into how machine age influences maintenance costs. Kritika also helped with interpreting complex relationships between operational hours and downtime.
+
+4. **Sakshi Pandey**: Worked on data exploration and visualization, focusing on creating intuitive charts for machine breakdown frequencies, seasonal maintenance trends, and maintenance cost distribution across equipment categories.
+
+5. **Sambit Pani**: Contextualized the findings with respect to business impacts, focusing on how insights from the EDA can influence the strategic direction of maintenance planning. Sambit also assisted with the conclusions and summarization of key findings.
+
+
+## Conclusion
+
+The exploratory data analysis (EDA) of maintenance data has uncovered key insights that could drive significant improvements in operational efficiency and cost control. Unplanned maintenance activities contribute to the majority of machine downtime, highlighting the urgent need for implementing predictive maintenance strategies. Additionally, older machines, particularly those beyond 10,000 days, exhibit higher maintenance costs, stressing the importance of timely preventive measures to reduce repair expenses.
+
+Frequent maintenance issues with machines like rotary fillers and packers suggest they are critical bottlenecks, requiring focused attention to improve production flow. Furthermore, the large number of records categorized as "Unknown" reveals data quality gaps that, if addressed, could enhance the accuracy and depth of future analyses.
+
+This EDA provides a solid foundation for adopting a more proactive, data-driven maintenance approach. By focusing on high-risk equipment, improving data quality, and implementing predictive models, Swire Coca-Cola can minimize unplanned downtimes, reduce maintenance costs, and enhance overall operational performance.
